@@ -575,13 +575,15 @@ body {
 .content { position:relative; z-index:10; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:30px; text-align:center; }
 .logo { font-size:72px; font-weight:300; letter-spacing:16px; margin-bottom:6px; background:linear-gradient(135deg,#fff,#9db9ff,#b6a5ff); -webkit-background-clip:text; background-clip:text; color:transparent; filter:drop-shadow(0 0 25px rgba(80,150,255,.35)); animation:pulseLogo 4s ease-in-out infinite; }
 .subtitle { color:#9fb0d1; font-size:15px; letter-spacing:7px; margin-bottom:52px; text-transform:uppercase; opacity:.9; }
-.search { width:min(700px,92vw); height:66px; display:flex; align-items:center; padding:8px 14px 8px 26px; border-radius:22px; background:rgba(10, 20, 38, .82); border:1px solid rgba(120, 170, 250, .22); box-shadow:0 0 40px rgba(15, 45, 90, .25), inset 0 0 20px rgba(255,255,255,.03); backdrop-filter:blur(20px); transition:.28s; }
-.search:focus-within { border-color:#5b9cff; box-shadow:0 0 45px rgba(60, 130, 255, .35), inset 0 0 25px rgba(255,255,255,.05); background:rgba(14, 26, 48, .9); }
-.search input { flex:1; min-width:0; border:0; outline:0; background:transparent; color:#fff; font-size:17px; }
-.search input::placeholder { color:#8a9bb4; }
-.search button { width:48px; height:48px; border:0; border-radius:14px; background:linear-gradient(135deg,#2866bd,#5b48d9); color:white; font-size:21px; cursor:pointer; box-shadow:0 4px 14px rgba(40, 102, 189, .4); transition:.25s; }
-.search button:hover { background:linear-gradient(135deg,#3a78d1,#6e5bf0); transform:translateY(-1px); }
-.search button:active { transform:translateY(1px); }
+.search { width:min(700px,92vw); height:58px; display:flex; align-items:center; padding:6px 8px 6px 24px; border-radius:32px; background:rgba(10, 20, 38, .88); border:1px solid rgba(120, 170, 250, .25); box-shadow:0 4px 24px rgba(0, 0, 0, .35); backdrop-filter:blur(20px); transition:box-shadow .2s, background .2s, border-color .2s; }
+.search:hover { background:rgba(14, 26, 48, .95); box-shadow:0 6px 30px rgba(0, 0, 0, .45); border-color:rgba(120, 170, 250, .4); }
+.search:focus-within { border-color:rgba(120, 170, 250, .55); box-shadow:0 6px 30px rgba(0, 0, 0, .45); background:rgba(16, 29, 52, .97); }
+.search input { flex:1; min-width:0; border:0; outline:0; background:transparent; color:#fff; font-size:16px; height:100%; }
+.search input::placeholder { color:#9aa9c0; }
+.search button { width:44px; height:44px; margin-left:8px; border:0; border-radius:50%; background:transparent; color:#9fb5d6; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .2s, color .2s; }
+.search button svg { width:22px; height:22px; }
+.search button:hover { background:rgba(90, 140, 220, .16); color:#8ab4ff; }
+.search button:active { background:rgba(90, 140, 220, .28); }
 .shortcuts { display:flex; gap:20px; margin-top:52px; flex-wrap:wrap; justify-content:center; }
 .shortcut { width:120px; height:118px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-decoration:none; color:#c7d6ea; border:1px solid rgba(140, 170, 205, .14); border-radius:22px; background:linear-gradient(145deg, rgba(20,40,70,.6), rgba(12,22,44,.6)); backdrop-filter:blur(12px); transition:.3s; position:relative; overflow:hidden; }
 .shortcut::before { content:''; position:absolute; inset:0; border-radius:22px; background:linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent); opacity:0; transition:.3s; }
@@ -607,7 +609,12 @@ body {
     <div class='subtitle'>explore the universe</div>
     <form class='search' action='https://www.google.com/search' method='GET'>
         <input type='text' name='q' placeholder='Что ищете во вселенной...' autocomplete='off' autofocus>
-        <button type='submit'>⌕</button>
+        <button type='submit' aria-label='Поиск'>
+            <svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'>
+                <circle cx='10.5' cy='10.5' r='6.5' stroke='currentColor' stroke-width='2'/>
+                <path d='M15.5 15.5L21 21' stroke='currentColor' stroke-width='2' stroke-linecap='round'/>
+            </svg>
+        </button>
     </form>
     <div class='shortcuts'>
         <a class='shortcut' href='https://www.youtube.com'><span class='icon'>▶</span><span>YouTube</span></a>
