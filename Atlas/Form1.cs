@@ -68,7 +68,7 @@ namespace Atlas
             return client;
         }
 
-        private const string AppVersion = "1.0.14";
+        private const string AppVersion = "1.0.15";
         private const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
@@ -156,7 +156,7 @@ namespace Atlas
             public List<string> BlockedDomains { get; set; } = new List<string>();
             public List<BlockerCategory> Categories { get; set; } = new List<BlockerCategory>();
             public int BlockedCount { get; set; } = 0;
-            public int Version { get; set; } = 3;
+            public int Version { get; set; } = 4;
         }
 
         private class DownloadManagerForm : Form
@@ -838,7 +838,9 @@ namespace Atlas
                 new BlockerCategory("Прочие трекеры", true,
                     "google-analytics.com", "googletagmanager.com", "connect.facebook.net", "facebook.net",
                     "scorecardresearch.com", "quantserve.com", "chartbeat.net", "hotjar.com", "mixpanel.com", "segment.io"),
-                new BlockerCategory("Whitelist (разрешённые сайты)", true),
+                new BlockerCategory("Whitelist (разрешённые сайты)", true,
+                    "accounts.google.com", "www.google.com", "www.gstatic.com", "www.youtube.com", "youtube.com",
+                    "google.com", "gstatic.com", "recaptcha.net", "googleusercontent.com", "googleapis.com"),
                 // === Расширенная защита: рекламные сети, трекеры и паттерны ===
                 new BlockerCategory("Расширенная защита (доп. сети)", true,
                     // Рекламные сети и биржи
@@ -928,6 +930,22 @@ namespace Atlas
                             blocker.Version = 3;
                             SaveBlockerSettings();
                         }
+                        // Миграция на версию 4 — обновляем Whitelist для входа в Google/YouTube
+                        if (blocker.Version < 4)
+                        {
+                            var defaults = BuildDefaultCategories();
+                            var defWl = defaults.FirstOrDefault(c => c.Name.StartsWith("Whitelist"));
+                            var curWl = blocker.Categories.FirstOrDefault(c => c.Name.StartsWith("Whitelist"));
+                            if (defWl != null && curWl != null)
+                            {
+                                foreach (var d in defWl.Domains)
+                                    if (!curWl.Domains.Contains(d)) curWl.Domains.Add(d);
+                            }
+                            else if (defWl != null && curWl == null)
+                                blocker.Categories.Add(defWl);
+                            blocker.Version = 4;
+                            SaveBlockerSettings();
+                        }
                         return;
                     }
                 }
@@ -954,7 +972,8 @@ namespace Atlas
         private bool ShouldBlock(string url)
         {
             if (!blocker.Enabled || string.IsNullOrEmpty(url)) return false;
-            // Whitelist: если текущий сайт разрешён — не блокируем ничего на нём
+            // Whitelist: не блокируем запросы к разрешённым доменам (в т.ч.accounts.google.com)
+            if (IsWhitelisted(url)) return false;
             if (!string.IsNullOrEmpty(currentPageUrl) && IsWhitelisted(currentPageUrl)) return false;
 
             foreach (var cat in blocker.Categories)
