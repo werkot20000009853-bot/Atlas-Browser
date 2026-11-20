@@ -48,9 +48,18 @@ namespace Atlas
         private readonly string logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "atlas.log");
 
         // Единый HTTP-клиент для всех сетевых запросов (избегаем исчерпания сокетов)
-        private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        private static readonly HttpClient Http = CreateHttpClient();
 
-        private const string AppVersion = "1.0.7";
+        private static HttpClient CreateHttpClient()
+        {
+            var client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+            // GitHub API требует User-Agent — без него возвращает 403
+            client.DefaultRequestHeaders.Add("User-Agent", "Atlas-Browser/1.0");
+            client.DefaultRequestHeaders.Add("Accept", "application/vnd.github+json");
+            return client;
+        }
+
+        private const string AppVersion = "1.0.8";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
         // Современные иконки (Segoe MDL2 Assets — встроен в Windows 10/11)
