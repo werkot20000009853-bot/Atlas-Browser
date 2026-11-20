@@ -79,6 +79,7 @@ namespace Atlas
             tabContainer.Controls.Add(tabButton);
             tabContainer.Controls.Add(closeButton);
 
+            tabContainer.Tag = browserContainer;
             int newTabIdx = tabsHeaderPanel.Controls.Count - 1;
             tabsHeaderPanel.Controls.Add(tabContainer);
             tabsHeaderPanel.Controls.SetChildIndex(tabContainer, newTabIdx);
@@ -99,7 +100,11 @@ namespace Atlas
             pinItem.Click += (s, e) => { TogglePinTab(tabContainer, tabButton); };
             var closeItem = new ToolStripMenuItem("Закрыть вкладку");
             closeItem.Click += (s, e) => { CloseTab(tabContainer, browserContainer, webView); };
-            tabMenu.Items.AddRange(new ToolStripItem[] { pinItem, closeItem });
+            var closeOthers = new ToolStripMenuItem("Закрыть другие вкладки");
+            closeOthers.Click += (s, e) => { CloseOtherTabs(tabContainer); };
+            var closeRight = new ToolStripMenuItem("Закрыть вкладки справа");
+            closeRight.Click += (s, e) => { CloseTabsToRight(tabContainer); };
+            tabMenu.Items.AddRange(new ToolStripItem[] { pinItem, closeItem, new ToolStripSeparator(), closeOthers, closeRight });
             tabContainer.ContextMenuStrip = tabMenu;
 
             activateAction();

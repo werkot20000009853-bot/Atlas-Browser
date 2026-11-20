@@ -40,6 +40,9 @@ namespace Atlas
         // Закреплённые вкладки
         private readonly Dictionary<Panel, bool> pinnedTabs = new Dictionary<Panel, bool>();
 
+        // Недавно закрытые вкладки (для Ctrl+Shift+T)
+        private readonly Stack<string> recentlyClosed = new Stack<string>();
+
         // Настройки приложения
         private AppSettings appSettings = new AppSettings();
         private readonly string settingsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.dat");
@@ -59,7 +62,7 @@ namespace Atlas
             return client;
         }
 
-        private const string AppVersion = "1.0.8";
+        private const string AppVersion = "1.0.9";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
         // Современные иконки (Segoe MDL2 Assets — встроен в Windows 10/11)
@@ -1370,6 +1373,21 @@ namespace Atlas
                 CloseCurrentTab();
                 return true;
             }
+            // Ctrl+Shift+T — восстановить закрытую вкладку
+            if (keyData == (Keys.Control | Keys.Shift | Keys.T))
+            {
+                if (recentlyClosed.Count > 0)
+                {
+                    string url = recentlyClosed.Pop();
+                    AddNewTab(url);
+                    Log("Вкладка восстановлена: " + url);
+                }
+                else
+                {
+                    MessageBox.Show("Нет недавно закрытых вкладок.", "Atlas", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                return true;
+            }
             // Ctrl+L — фокус на адресную строку
             if (keyData == (Keys.Control | Keys.L))
             {
@@ -2240,6 +2258,18 @@ namespace Atlas
 
         private void CloseTab(Panel tabContainer, Panel browserContainer, WebView2 webView)
         {
+            // Запоминаем адрес вкладки для восстановления (кроме домашней страницы)
+            try
+            {
+                if (webView.CoreWebView2?.Source != null)
+                {
+                    string url = webView.CoreWebView2.Source;
+                    if (!url.StartsWith("data:text/html") && !url.StartsWith("about:"))
+                        recentlyClosed.Push(url);
+                }
+            }
+            catch { }
+
             int tabCount = 0;
             foreach (Control ctrl in tabsHeaderPanel.Controls)
             {
@@ -2272,6 +2302,33 @@ namespace Atlas
             webView.Dispose();
             tabContainer.Dispose();
             browserContainer.Dispose();
+        }
+
+        // Закрыть все вкладки, кроме указанной
+        private void CloseOtherTabs(Panel keepTab)
+        {
+            foreach (var ctrl in tabsHeaderPanel.Controls.Cast<Control>().ToList())
+            {
+                if (ctrl is Panel p && p != keepTab)
+                    CloseTabByContainer(p);
+            }
+        }
+
+        // Закрыть вкладки справа от указанной
+        private void CloseTabsToRight(Panel fromTab)
+        {
+            int idx = tabsHeaderPanel.Controls.GetChildIndex(fromTab);
+            foreach (var ctrl in tabsHeaderPanel.Controls.Cast<Control>().Skip(idx + 1).ToList())
+            {
+                if (ctrl is Panel p)
+                    CloseTabByContainer(p);
+            }
+        }
+
+        private void CloseTabByContainer(Panel tabPanel)
+        {
+            if (tabPanel.Tag is Panel bc && bc.Controls.Count > 0 && bc.Controls[0] is WebView2 wv)
+                CloseTab(tabPanel, bc, wv);
         }
 
         private void SwitchTab(Panel tabContainer, Panel browserContainer, WebView2 webView)
