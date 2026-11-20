@@ -8,10 +8,12 @@ namespace Atlas
     internal class SettingsForm : Form
     {
         private readonly Action onSave;
+        private readonly Action onCheckUpdates;
 
-        public SettingsForm(Form1.AppSettings settings, Action<Form, string> darkHeader, Action onSave)
+        public SettingsForm(Form1.AppSettings settings, Action<Form, string> darkHeader, Action onSave, Action onCheckUpdates)
         {
             this.onSave = onSave;
+            this.onCheckUpdates = onCheckUpdates;
             Text = "Atlas — Настройки";
             Width = 650; Height = 520;
             StartPosition = FormStartPosition.CenterParent;
@@ -87,7 +89,7 @@ namespace Atlas
             };
 
             Button btnCheckNow = MakeButton("Проверить сейчас", fieldX, 274, 160);
-            btnCheckNow.Click += (s, e) => onSave();
+            btnCheckNow.Click += (s, e) => onCheckUpdates();
 
             Button btnSave = MakeButton("Сохранить", 24, 340, 180);
             btnSave.BackColor = Color.FromArgb(56, 139, 253);

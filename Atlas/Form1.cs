@@ -62,7 +62,7 @@ namespace Atlas
             return client;
         }
 
-        private const string AppVersion = "1.0.9";
+        private const string AppVersion = "1.0.10";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
         // Современные иконки (Segoe MDL2 Assets — встроен в Windows 10/11)
@@ -2849,7 +2849,8 @@ namespace Atlas
         private void OpenAppSettings()
         {
             using var form = new SettingsForm(appSettings, ApplyDarkTitle,
-                () => { SaveAppSettings(); ApplyTheme(); });
+                () => { SaveAppSettings(); ApplyTheme(); },
+                () => { SaveAppSettings(); _ = CheckForUpdatesAsync(true); });
             form.ShowDialog(this);
         }
     }
