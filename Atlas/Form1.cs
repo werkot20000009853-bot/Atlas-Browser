@@ -48,7 +48,8 @@ namespace Atlas
         // Единый HTTP-клиент для всех сетевых запросов (избегаем исчерпания сокетов)
         private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
 
-        private const string AppVersion = "1.0.4";
+        private const string AppVersion = "1.0.5";
+        private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
         // Современные иконки (Segoe MDL2 Assets — встроен в Windows 10/11)
         private const string IconFont = "Segoe MDL2 Assets";
@@ -2602,7 +2603,7 @@ namespace Atlas
         // ==================== АВТООБНОВЛЕНИЕ (GitHub Releases API) ====================
         private async void CheckForUpdatesOnStartup()
         {
-            if (!appSettings.AutoUpdate || string.IsNullOrWhiteSpace(appSettings.UpdateRepo)) return;
+            if (!appSettings.AutoUpdate) return;
             string today = DateTime.Now.ToString("yyyy-MM-dd");
             if (appSettings.LastUpdateCheck == today) return;
 
@@ -2613,7 +2614,7 @@ namespace Atlas
 
         private async Task CheckForUpdatesAsync(bool showResultEvenIfNoUpdate)
         {
-            string repo = appSettings.UpdateRepo?.Trim();
+            string repo = UpdateRepoFixed;
             if (string.IsNullOrWhiteSpace(repo))
             {
                 if (showResultEvenIfNoUpdate)
@@ -3024,16 +3025,17 @@ namespace Atlas
             cbAutoInstall.Checked = appSettings.AutoInstall;
 
             Label lRepo = new Label { Text = "Репозиторий обновлений:", Location = new Point(24, 204), Width = labelW, AutoSize = false };
-            TextBox tbRepo = new TextBox
+            Label tbRepo = new Label
             {
-                Location = new Point(fieldX, 200), Width = fieldW,
-                Text = appSettings.UpdateRepo,
-                BackColor = Color.FromArgb(10, 22, 42), ForeColor = TextMain,
-                BorderStyle = BorderStyle.FixedSingle
+                Location = new Point(fieldX, 200), Width = fieldW, Height = 26,
+                Text = UpdateRepoFixed,
+                ForeColor = Accent,
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleLeft
             };
             Label repoHint = new Label
             {
-                Text = "Релиз GitHub, откуда брать обновления (например: owner/repo)",
+                Text = "Официальный репозиторий Atlas (изменению не подлежит)",
                 Location = new Point(fieldX, 226), AutoSize = true,
                 ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F)
             };
@@ -3046,7 +3048,6 @@ namespace Atlas
             btnCheckNow.FlatAppearance.BorderSize = 0;
             btnCheckNow.Click += (s, e) =>
             {
-                appSettings.UpdateRepo = tbRepo.Text.Trim();
                 appSettings.AutoUpdate = cbAutoUpdate.Checked;
                 SaveAppSettings();
                 _ = CheckForUpdatesAsync(true);
@@ -3070,7 +3071,6 @@ namespace Atlas
                 appSettings.DownloadFolder = tbFolder.Text.Trim();
                 appSettings.AutoUpdate = cbAutoUpdate.Checked;
                 appSettings.AutoInstall = cbAutoInstall.Checked;
-                appSettings.UpdateRepo = tbRepo.Text.Trim();
                 SaveAppSettings();
                 ApplyTheme();
             }
