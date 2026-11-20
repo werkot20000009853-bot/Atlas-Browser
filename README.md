@@ -11,6 +11,9 @@
 [![Latest Release](https://img.shields.io/github/v/release/werkot20000009853-bot/Atlas-Browser)](https://github.com/werkot20000009853-bot/Atlas-Browser/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)](https://www.microsoft.com/windows)
+[![Bug reports](https://img.shields.io/badge/bug%20reports-Gmail-red)](mailto:werkot20000009853@gmail.com)
+
+> 🐞 **Нашли баг или есть идея?** Пишите на **werkot20000009853@gmail.com** — я обязательно посмотрю.
 
 [⬇️ Скачать последнюю версию](https://github.com/werkot20000009853-bot/Atlas-Browser/releases/latest) · [🚀 Возможности](#-Возможности) · [⚡ Киллер-фичи](#-Киллер-фичи-по-сравнению-с-обычным-браузером) · [🛠 Сборка](#-Сборка-из-исходников)
 
