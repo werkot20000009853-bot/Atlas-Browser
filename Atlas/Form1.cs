@@ -72,6 +72,7 @@ namespace Atlas
         private const string IcoShield    = "\uE7EE";
         private const string IcoPicker    = "\uE7B3";
         private const string IcoSettings  = "\uE713";
+        private const string IcoExtension = "\uE9E7"; // пазл-расширение
         private const string IcoClose     = "\uE711";
         private const string IcoMin       = "\uE70D";
         private const string IcoMax       = "\uE737";
@@ -519,6 +520,7 @@ namespace Atlas
         private Button btnBlocker;
         private Button btnPicker;
         private Button btnSettings;
+        private Button btnExtensions;
         private bool pickerMode = false;
         private string currentPageUrl = "";
 
@@ -541,6 +543,7 @@ namespace Atlas
             var options = new CoreWebView2EnvironmentOptions(
                 additionalBrowserArguments: "--disable-sync --disable-background-networking --disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen,msEdgePromo,msDefaultBrowserPromo,PromoBrowser,ChromeWhatsNewUI,msEdgeWhatsNew,msEdgeUptake --disable-default-browser-check --no-first-run --no-default-browser-check"
             );
+            options.AreBrowserExtensionsEnabled = true;
 
             webEnvironment = await CoreWebView2Environment.CreateAsync(null, null, options);
             AddNewTab(HomePageUrl);
@@ -1218,6 +1221,12 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
             btnSettings.Top = 56;
             btnSettings.Click += (s, e) => OpenAppSettings();
 
+            // Расширения Chrome
+            btnExtensions = CreateNavButton(IcoExtension, 28);
+            btnExtensions.Left = 258;
+            btnExtensions.Top = 56;
+            btnExtensions.Click += (s, e) => OpenExtensions();
+
             navPanel.Controls.Add(btnRefresh);
             navPanel.Controls.Add(btnHome);
             navPanel.Controls.Add(btnHistory);
@@ -1233,6 +1242,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
             navPanel.Controls.Add(btnBlocker);
             navPanel.Controls.Add(btnPicker);
             navPanel.Controls.Add(btnSettings);
+            navPanel.Controls.Add(btnExtensions);
 
             navPanel.Resize += (s, e) =>
             {
@@ -3390,6 +3400,168 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                     TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding);
             };
             return cb;
+        }
+
+        // ==================== РАСШИРЕНИЯ CHROME ====================
+        private class ExtensionsForm : Form
+        {
+            private readonly CoreWebView2Profile profile;
+            private readonly ListBox list;
+            private readonly Label status;
+            private List<CoreWebView2BrowserExtension> extensions = new List<CoreWebView2BrowserExtension>();
+
+            public ExtensionsForm(CoreWebView2Profile profile, Action<Form, string> darkHeader)
+            {
+                this.profile = profile;
+                Text = "Atlas — Расширения";
+                Width = 560;
+                Height = 460;
+                StartPosition = FormStartPosition.CenterParent;
+                BackColor = Color.FromArgb(3, 7, 17);
+                ForeColor = TextMain;
+                Font = new Font("Segoe UI", 9.5F);
+                ShowIcon = false;
+
+                Label info = new Label
+                {
+                    Text = "Установленные расширения Chrome (распакованные из папки):",
+                    Location = new Point(24, 56), AutoSize = true, ForeColor = TextMuted
+                };
+
+                list = new ListBox
+                {
+                    Location = new Point(24, 82), Size = new Size(494, 200),
+                    BackColor = Color.FromArgb(10, 22, 42), ForeColor = TextMain,
+                    BorderStyle = BorderStyle.FixedSingle
+                };
+
+                Button addBtn = MakeButton("Установить из папки", 24, 300, 180, Color.FromArgb(28, 70, 128));
+                addBtn.Click += async (s, e) => await InstallExtension();
+
+                Button toggleBtn = MakeButton("Вкл / Выкл", 214, 300, 130, Surface);
+                toggleBtn.Click += async (s, e) => await ToggleExtension();
+
+                Button removeBtn = MakeButton("Удалить", 354, 300, 120, Color.FromArgb(70, 30, 35));
+                removeBtn.Click += async (s, e) => await RemoveExtension();
+
+                Button refreshBtn = MakeButton("Обновить список", 24, 342, 180, Surface);
+                refreshBtn.Click += async (s, e) => await RefreshExtensions();
+
+                status = new Label
+                {
+                    Location = new Point(24, 390), Size = new Size(494, 40),
+                    ForeColor = Accent, Font = new Font("Segoe UI", 9F),
+                    Text = ""
+                };
+
+                Controls.Add(info);
+                Controls.Add(list);
+                Controls.Add(addBtn);
+                Controls.Add(toggleBtn);
+                Controls.Add(removeBtn);
+                Controls.Add(refreshBtn);
+                Controls.Add(status);
+
+                darkHeader(this, "Atlas — Расширения");
+                _ = RefreshExtensions();
+            }
+
+            private Button MakeButton(string text, int left, int top, int width, Color back)
+            {
+                var b = new Button
+                {
+                    Text = text, Location = new Point(left, top), Size = new Size(width, 32),
+                    FlatStyle = FlatStyle.Flat, BackColor = back, ForeColor = Color.White,
+                    Font = new Font("Segoe UI", 9F, FontStyle.Bold), Cursor = Cursors.Hand
+                };
+                b.FlatAppearance.BorderSize = 0;
+                return b;
+            }
+
+            private CoreWebView2BrowserExtension Selected =>
+                list.SelectedIndex >= 0 && list.SelectedIndex < extensions.Count ? extensions[list.SelectedIndex] : null;
+
+            private async Task RefreshExtensions()
+            {
+                try
+                {
+                    extensions = (await profile.GetBrowserExtensionsAsync()).ToList();
+                    list.Items.Clear();
+                    foreach (var ext in extensions)
+                        list.Items.Add($"{ext.Name}  [{(ext.IsEnabled ? "вкл" : "выкл")}]  — {ext.Id}");
+                    status.Text = $"Найдено расширений: {extensions.Count}";
+                }
+                catch (Exception ex) { status.Text = "Ошибка: " + ex.Message; }
+            }
+
+            private async Task InstallExtension()
+            {
+                using var fbd = new FolderBrowserDialog
+                {
+                    Description = "Выберите папку с распакованным расширением (там есть manifest.json)"
+                };
+                if (fbd.ShowDialog() != DialogResult.OK) return;
+                try
+                {
+                    status.Text = "Установка...";
+                    await profile.AddBrowserExtensionAsync(fbd.SelectedPath);
+                    await RefreshExtensions();
+                    status.Text = "Расширение установлено. Перезапустите вкладки, если оно не активировалось.";
+                    OnExtensionsChanged?.Invoke();
+                }
+                catch (Exception ex) { status.Text = "Ошибка установки: " + ex.Message; }
+            }
+
+            private async Task ToggleExtension()
+            {
+                var ext = Selected;
+                if (ext == null) { status.Text = "Выберите расширение."; return; }
+                try
+                {
+                    await ext.EnableAsync(!ext.IsEnabled);
+                    await RefreshExtensions();
+                    OnExtensionsChanged?.Invoke();
+                }
+                catch (Exception ex) { status.Text = "Ошибка: " + ex.Message; }
+            }
+
+            private async Task RemoveExtension()
+            {
+                var ext = Selected;
+                if (ext == null) { status.Text = "Выберите расширение."; return; }
+                try
+                {
+                    await ext.RemoveAsync();
+                    await RefreshExtensions();
+                    OnExtensionsChanged?.Invoke();
+                }
+                catch (Exception ex) { status.Text = "Ошибка: " + ex.Message; }
+            }
+
+            public Action OnExtensionsChanged = () => { };
+        }
+
+        private void OpenExtensions()
+        {
+            var wv = GetCurrentWebView();
+            if (wv == null)
+            {
+                MessageBox.Show("Браузер ещё инициализируется.", "Atlas — Расширения", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            using var form = new ExtensionsForm(wv.Profile, ApplyDarkTitle);
+            form.OnExtensionsChanged = () =>
+            {
+                // Перезагружаем открытые вкладки, чтобы расширение применилось
+                foreach (Control c in contentPanel.Controls)
+                {
+                    if (c is Panel p && p.Controls.Count > 0 && p.Controls[0] is WebView2 w)
+                    {
+                        try { w.CoreWebView2?.Reload(); } catch { }
+                    }
+                }
+            };
+            form.ShowDialog(this);
         }
 
         private void OpenAppSettings()
