@@ -138,6 +138,10 @@ namespace Atlas
                 // Средний клик / target="_blank" — открываем вкладку в том же окне
                 webView.CoreWebView2.NewWindowRequested += (sender, args) =>
                 {
+                    // Полноэкранный запрос YouTube — не перехватываем, WebView2 сам войдёт в fullscreen
+                    // (обрабатывается через ContainsFullScreenElementChanged)
+                    if (args.IsUserInitiated && string.IsNullOrEmpty(args.Uri)) return;
+
                     args.Handled = true; // запрещаем WebView2 открывать новое окно
                     string target = args.Uri;
                     if (string.IsNullOrWhiteSpace(target)) return;
@@ -147,6 +151,15 @@ namespace Atlas
                         BeginInvoke(new Action(() => AddNewTab(target)));
                     else
                         AddNewTab(target);
+                };
+
+                // Полноэкранный режим видео (YouTube и др.)
+                webView.CoreWebView2.ContainsFullScreenElementChanged += (s, e) =>
+                {
+                    if (InvokeRequired)
+                        BeginInvoke(new Action(() => SetVideoFullScreen(webView.CoreWebView2.ContainsFullScreenElement)));
+                    else
+                        SetVideoFullScreen(webView.CoreWebView2.ContainsFullScreenElement);
                 };
 
                 webView.CoreWebView2.WebMessageReceived += (s, e) =>

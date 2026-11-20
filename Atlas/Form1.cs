@@ -43,6 +43,12 @@ namespace Atlas
         // Недавно закрытые вкладки (для Ctrl+Shift+T)
         private readonly Stack<string> recentlyClosed = new Stack<string>();
 
+        // Полноэкранный режим видео
+        private bool videoFullScreen = false;
+        private FormWindowState prevWindowState;
+        private FormBorderStyle prevBorderStyle;
+        private bool prevMaximizeBox, prevMinimizeBox;
+
         // Настройки приложения
         private AppSettings appSettings = new AppSettings();
         private readonly string settingsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.dat");
@@ -62,7 +68,7 @@ namespace Atlas
             return client;
         }
 
-        private const string AppVersion = "1.0.10";
+        private const string AppVersion = "1.0.11";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
         // Современные иконки (Segoe MDL2 Assets — встроен в Windows 10/11)
@@ -549,7 +555,7 @@ namespace Atlas
         {
             string singleProcessArg = appSettings.SingleProcessMode ? "--single-process " : "";
             var options = new CoreWebView2EnvironmentOptions(
-                additionalBrowserArguments: singleProcessArg + "--disable-sync --disable-background-networking --disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen,msEdgePromo,msDefaultBrowserPromo,PromoBrowser,ChromeWhatsNewUI,msEdgeWhatsNew,msEdgeUptake --disable-default-browser-check --no-first-run --no-default-browser-check"
+                additionalBrowserArguments: singleProcessArg + "--disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen --no-first-run"
             );
             options.AreBrowserExtensionsEnabled = true;
 
@@ -558,7 +564,7 @@ namespace Atlas
             // Отдельный профиль для инкогнито — во Temp, удаляется при выходе
             string incArg = appSettings.SingleProcessMode ? "--single-process " : "";
             var incOptions = new CoreWebView2EnvironmentOptions(
-                additionalBrowserArguments: incArg + "--disable-sync --disable-background-networking --disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen,msEdgePromo,msDefaultBrowserPromo,PromoBrowser,ChromeWhatsNewUI,msEdgeWhatsNew,msEdgeUptake --disable-default-browser-check --no-first-run --no-default-browser-check"
+                additionalBrowserArguments: incArg + "--disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen --no-first-run"
             );
             incOptions.AreBrowserExtensionsEnabled = true;
             incognitoProfileDir = Path.Combine(Path.GetTempPath(), "AtlasIncognito_" + Guid.NewGuid().ToString("N"));
@@ -590,7 +596,7 @@ namespace Atlas
 
                 string incArg = appSettings.SingleProcessMode ? "--single-process " : "";
                 var incOptions = new CoreWebView2EnvironmentOptions(
-                    additionalBrowserArguments: incArg + "--disable-sync --disable-background-networking --disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen,msEdgePromo,msDefaultBrowserPromo,PromoBrowser,ChromeWhatsNewUI,msEdgeWhatsNew,msEdgeUptake --disable-default-browser-check --no-first-run --no-default-browser-check"
+                    additionalBrowserArguments: incArg + "--disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen --no-first-run"
                 );
                 incOptions.AreBrowserExtensionsEnabled = true;
                 incognitoProfileDir = Path.Combine(Path.GetTempPath(), "AtlasIncognito_" + Guid.NewGuid().ToString("N"));
@@ -1005,7 +1011,7 @@ namespace Atlas
             tabsHeaderPanel.Controls.Add(btnNewTab);
 
             // ---------- Навигационная панель ----------
-            Panel navPanel = CreateGlassPanel();
+            navPanel = CreateGlassPanel();
             navPanel.Height = 90;
             navPanel.Dock = DockStyle.Top;
             navPanel.Padding = new Padding(14, 8, 14, 8);
@@ -2473,6 +2479,38 @@ namespace Atlas
         }
 
         // ==================== ВЗАИМОДЕЙСТВИЕ С ВКЛАДКАМИ ====================
+        // ==================== ПОЛНОЭКРАННОЕ ВИДЕО ====================
+        private void SetVideoFullScreen(bool enter)
+        {
+            if (enter == videoFullScreen) return;
+            videoFullScreen = enter;
+
+            if (enter)
+            {
+                prevWindowState = WindowState;
+                prevBorderStyle = FormBorderStyle;
+                prevMaximizeBox = MaximizeBox;
+                prevMinimizeBox = MinimizeBox;
+
+                // Скрываем панели браузера — остаётся только видео
+                titleBar.Visible = false;
+                tabsHeaderPanel.Visible = false;
+                navPanel.Visible = false;
+                FormBorderStyle = FormBorderStyle.None;
+                WindowState = FormWindowState.Maximized;
+            }
+            else
+            {
+                titleBar.Visible = true;
+                tabsHeaderPanel.Visible = true;
+                navPanel.Visible = true;
+                WindowState = prevWindowState;
+                FormBorderStyle = prevBorderStyle == FormBorderStyle.None ? FormBorderStyle.Sizable : prevBorderStyle;
+            }
+        }
+
+        // Панель навигации хранится в поле (нужна для fullscreen)
+        private Panel navPanel;
         private void TogglePinTab(Panel tab, Button label)
         {
             bool pinned = pinnedTabs.ContainsKey(tab) && pinnedTabs[tab];
