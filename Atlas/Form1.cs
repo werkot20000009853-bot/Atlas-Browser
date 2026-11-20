@@ -57,6 +57,28 @@ namespace Atlas
 
         private const string AppVersion = "1.0.1";
 
+        // Современные иконки (Segoe MDL2 Assets — встроен в Windows 10/11)
+        private const string IconFont = "Segoe MDL2 Assets";
+        private const string IcoBack      = "\uE0A6";
+        private const string IcoForward   = "\uE0A7";
+        private const string IcoRefresh   = "\uE72C";
+        private const string IcoHome      = "\uE80F";
+        private const string IcoHistory   = "\uE81C";
+        private const string IcoStar      = "\uE728"; // контур звезды
+        private const string IcoStarFill  = "\uE735"; // залитая звезда
+        private const string IcoDownload  = "\uE896";
+        private const string IcoAdd       = "\uE710";
+        private const string IcoIncognito = "\uE971";
+        private const string IcoShield    = "\uE7EE";
+        private const string IcoPicker    = "\uE7B3";
+        private const string IcoSettings  = "\uE713";
+        private const string IcoClose     = "\uE711";
+        private const string IcoMin       = "\uE70D";
+        private const string IcoMax       = "\uE737";
+        private const string IcoPause     = "\uE769";
+        private const string IcoFolder    = "\uE838";
+        private const string IcoDelete    = "\uE74D";
+
         // ---------- Космическая цветовая палитра Atlas ----------
         private static readonly Color SpaceDark   = Color.FromArgb(2, 5, 12);   // фон формы
         private static readonly Color PanelDark   = Color.FromArgb(6, 13, 28);  // панели
@@ -149,7 +171,7 @@ namespace Atlas
 
                 OpenFolderBtn = new Button
                 {
-                    Text = "📁 Папка",
+                    Text = "Папка",
                     Location = new Point(680, 20),
                     Size = new Size(100, 30),
                     FlatStyle = FlatStyle.Flat,
@@ -232,7 +254,7 @@ namespace Atlas
                 };
                 Label title = new Label
                 {
-                    Text = "🛡 Блокировщик рекламы и трекеров",
+                    Text = "Блокировщик рекламы и трекеров",
                     AutoSize = true,
                     Location = new Point(24, 16),
                     ForeColor = Color.FromArgb(226, 236, 252),
@@ -707,13 +729,13 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
             };
             Button close = new Button
             {
-                Text = "✕",
+                Text = IcoClose,
+                Font = new Font(IconFont, 11),
                 Width = 34,
                 Height = 34,
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = TextMuted,
                 BackColor = Color.Transparent,
-                Font = new Font("Segoe UI", 11, FontStyle.Bold),
                 Cursor = Cursors.Hand
             };
             close.FlatAppearance.BorderSize = 0;
@@ -1019,7 +1041,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                 g.DrawLine(pen, 0, tabsHeaderPanel.Height - 1, tabsHeaderPanel.Width, tabsHeaderPanel.Height - 1);
             };
 
-            btnNewTab = CreateIconButton("+", 28);
+            btnNewTab = CreateIconButton(IcoAdd, 28);
             btnNewTab.Font = new Font("Segoe UI", 13, FontStyle.Bold);
             btnNewTab.Click += (s, e) => AddNewTab(HomePageUrl);
             tabsHeaderPanel.Controls.Add(btnNewTab);
@@ -1046,27 +1068,27 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
             int iconSize = 36;
             int x = 14;
 
-            btnRefresh = CreateNavButton("⟳", iconSize);
+            btnRefresh = CreateNavButton(IcoRefresh, iconSize);
             btnRefresh.Left = x; btnRefresh.Top = topY; x += iconSize + 4;
             btnRefresh.Click += (s, e) => GetCurrentWebView()?.Reload();
 
-            btnHome = CreateNavButton("🏠", iconSize);
+            btnHome = CreateNavButton(IcoHome, iconSize);
             btnHome.Left = x; btnHome.Top = topY; x += iconSize + 4;
             btnHome.Click += (s, e) => NavigateToUrl(HomePageUrl);
 
-            btnHistory = CreateNavButton("🕒", iconSize);
+            btnHistory = CreateNavButton(IcoHistory, iconSize);
             btnHistory.Left = x; btnHistory.Top = topY; x += iconSize + 4;
             btnHistory.Click += (s, e) => OpenHistoryTab();
 
-            btnBookmarks = CreateNavButton("⭐", iconSize);
+            btnBookmarks = CreateNavButton(IcoStar, iconSize);
             btnBookmarks.Left = x; btnBookmarks.Top = topY; x += iconSize + 4;
             btnBookmarks.Click += (s, e) => OpenBookmarksTab();
 
-            btnDownloads = CreateNavButton("↓", iconSize);
+            btnDownloads = CreateNavButton(IcoDownload, iconSize);
             btnDownloads.Left = x; btnDownloads.Top = topY; x += iconSize + 4;
             btnDownloads.Click += (s, e) => OpenDownloadManager();
 
-            btnAddBookmark = CreateNavButton("☆", iconSize);
+            btnAddBookmark = CreateNavButton(IcoStar, iconSize);
             btnAddBookmark.Left = x; btnAddBookmark.Top = topY; x += iconSize + 4;
             btnAddBookmark.Click += (s, e) => ToggleBookmark();
 
@@ -1152,18 +1174,18 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
             btnGo.Click += (s, e) => NavigateToUrl(txtUrl.Text);
 
             // ---- Нижний ряд: назад / вперёд (одного размера, поменьше) ----
-            btnBack = CreateNavButton("<", 28);
+            btnBack = CreateNavButton(IcoBack, 28);
             btnBack.Left = 14;
             btnBack.Top = 56;
             btnBack.Click += (s, e) => GetCurrentWebView()?.GoBack();
 
-            btnForward = CreateNavButton(">", 28);
+            btnForward = CreateNavButton(IcoForward, 28);
             btnForward.Left = 48;
             btnForward.Top = 56;
             btnForward.Click += (s, e) => GetCurrentWebView()?.GoForward();
 
             // Режим инкогнито
-            btnIncognito = CreateNavButton("🕶", 28);
+            btnIncognito = CreateNavButton(IcoIncognito, 28);
             btnIncognito.Left = 90;
             btnIncognito.Top = 56;
             btnIncognito.Click += (s, e) =>
@@ -1178,20 +1200,20 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
             };
 
             // Блокировщик рекламы и трекеров
-            btnBlocker = CreateNavButton("🛡", 28);
+            btnBlocker = CreateNavButton(IcoShield, 28);
             btnBlocker.Left = 132;
             btnBlocker.Top = 56;
             btnBlocker.ForeColor = blocker.Enabled ? Accent : TextMuted;
             btnBlocker.Click += (s, e) => OpenBlockerSettings();
 
             // Пипетка: выбрать элемент рекламы на странице и добавить его домен в блокировщик
-            btnPicker = CreateNavButton("⌖", 28);
+            btnPicker = CreateNavButton(IcoPicker, 28);
             btnPicker.Left = 174;
             btnPicker.Top = 56;
             btnPicker.Click += (s, e) => TogglePickerMode();
 
             // Настройки приложения
-            btnSettings = CreateNavButton("⚙", 28);
+            btnSettings = CreateNavButton(IcoSettings, 28);
             btnSettings.Left = 216;
             btnSettings.Top = 56;
             btnSettings.Click += (s, e) => OpenAppSettings();
@@ -1271,9 +1293,9 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                     TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding);
             };
 
-            btnWinMin = CreateWindowButton("─", false);
-            btnWinMax = CreateWindowButton("□", false);
-            btnWinClose = CreateWindowButton("✕", true);
+            btnWinMin = CreateWindowButton(IcoMin, false);
+            btnWinMax = CreateWindowButton(IcoMax, false);
+            btnWinClose = CreateWindowButton(IcoClose, true);
 
             btnWinMin.Click += (s, e) => { WindowState = FormWindowState.Minimized; };
             btnWinMax.Click += (s, e) =>
@@ -1281,7 +1303,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                 WindowState = WindowState == FormWindowState.Maximized
                     ? FormWindowState.Normal
                     : FormWindowState.Maximized;
-                btnWinMax.Text = WindowState == FormWindowState.Maximized ? "❐" : "□";
+                btnWinMax.Text = WindowState == FormWindowState.Maximized ? "\uE73E" : IcoMax;
             };
             btnWinClose.Click += (s, e) => { Close(); };
 
@@ -1329,7 +1351,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                 Height = 34,
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = TextMuted,
-                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                Font = new Font(IconFont, 12),
                 TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Color.Transparent,
                 Padding = Padding.Empty
@@ -1517,7 +1539,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                 Width = size,
                 Height = size,
                 ForeColor = TextMuted,
-                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                Font = new Font(IconFont, 14),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Padding = Padding.Empty
             };
@@ -1537,7 +1559,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                 Width = size,
                 Height = size,
                 ForeColor = TextMuted,
-                Font = new Font("Segoe UI", size <= 30 ? 11 : 13, FontStyle.Bold),
+                Font = new Font(IconFont, size <= 30 ? 13 : 16),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Padding = Padding.Empty
             };
@@ -1697,25 +1719,25 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                 string url = webView.Source.ToString();
                 if (url.StartsWith("data:text/html"))
                 {
-                    btnAddBookmark.Text = "☆";
+                    btnAddBookmark.Text = IcoStar;
                     btnAddBookmark.ForeColor = Color.FromArgb(170, 170, 180);
                     return;
                 }
 
                 if (bookmarks.Exists(b => b.Url == url))
                 {
-                    btnAddBookmark.Text = "★";
+                    btnAddBookmark.Text = IcoStarFill;
                     btnAddBookmark.ForeColor = Color.FromArgb(234, 179, 8);
                 }
                 else
                 {
-                    btnAddBookmark.Text = "☆";
+                    btnAddBookmark.Text = IcoStar;
                     btnAddBookmark.ForeColor = Color.FromArgb(170, 170, 180);
                 }
             }
             else
             {
-                btnAddBookmark.Text = "☆";
+                btnAddBookmark.Text = IcoStar;
                 btnAddBookmark.ForeColor = Color.FromArgb(170, 170, 180);
             }
         }
@@ -1904,7 +1926,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
 
             Button closeButton = new Button()
             {
-                Text = "✕",
+                Text = IcoClose,
                 Width = 28,
                 Height = 28,
                 Top = 4,
@@ -1912,7 +1934,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = TextMuted,
                 BackColor = Color.Transparent,
-                Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+                Font = new Font(IconFont, 11),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Cursor = Cursors.Hand
             };
@@ -2236,7 +2258,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
             if (enabled)
             {
                 MessageBox.Show(
-                    "Пипетка включена.\nКликните по рекламному элементу на странице — его домен будет добавлен в блокировщик.\nНажмите ⌖ ещё раз для отмены.",
+                    "Пипетка включена.\nКликните по рекламному элементу на странице — его домен будет добавлен в блокировщик.\nНажмите кнопку пипетки ещё раз для отмены.",
                     "Atlas — Пипетка", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
 
@@ -2461,7 +2483,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
             Button openButton = CreateDownloadActionButton("Открыть", 0);
             Button folderButton = CreateDownloadActionButton("Папка", 1);
             Button removeButton = CreateDownloadActionButton("Убрать", 2);
-            Button pauseButton = CreateDownloadActionButton("⏸", 1);
+            Button pauseButton = CreateDownloadActionButton(IcoPause, 1);
             int right = card.Width - 16;
             removeButton.Location = new Point(right - removeButton.Width, 94);
             folderButton.Location = new Point(right - removeButton.Width - folderButton.Width - 7, 94);
@@ -2512,7 +2534,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                 Text = text,
                 Size = new Size(primary ? 82 : 70, 30),
                 ForeColor = primary ? Color.White : TextMain,
-                Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
+                Font = text == IcoPause ? new Font(IconFont, 12) : new Font("Segoe UI", 8.5F, FontStyle.Bold),
                 Padding = Padding.Empty
             };
             bool hovered = false;
@@ -2696,7 +2718,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                     {
                         foreach (Control sub in p.Controls)
                         {
-                            if (sub is Button b && b.Text != "✕") { b.PerformClick(); break; }
+                            if (sub is Button b && b.Text != IcoClose) { b.PerformClick(); break; }
                         }
                         break;
                     }
@@ -2725,7 +2747,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                     p.Invalidate();
                     foreach (Control subCtrl in p.Controls)
                     {
-                        if (subCtrl is Button btn && btn.Text != "✕")
+                        if (subCtrl is Button btn && btn.Text != IcoClose)
                         {
                             btn.ForeColor = TextMuted;
                             btn.BackColor = Color.Transparent;
@@ -2738,7 +2760,7 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
             tabContainer.Invalidate();
             foreach (Control subCtrl in tabContainer.Controls)
             {
-                if (subCtrl is Button btn && btn.Text != "✕")
+                if (subCtrl is Button btn && btn.Text != IcoClose)
                 {
                     btn.ForeColor = TextMain;
                     btn.BackColor = Color.Transparent;
