@@ -532,7 +532,7 @@ namespace Atlas
         private async void InitializeAsync()
         {
             var options = new CoreWebView2EnvironmentOptions(
-                additionalBrowserArguments: "--disable-sync --disable-background-networking --disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen,msEdgePromo,msDefaultBrowserPromo,PromoBrowser,ChromeWhatsNewUI,msEdgeWhatsNew,msEdgeUptake --disable-default-browser-check --no-first-run --no-default-browser-check"
+                additionalBrowserArguments: "--single-process --disable-sync --disable-background-networking --disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen,msEdgePromo,msDefaultBrowserPromo,PromoBrowser,ChromeWhatsNewUI,msEdgeWhatsNew,msEdgeUptake --disable-default-browser-check --no-first-run --no-default-browser-check"
             );
             options.AreBrowserExtensionsEnabled = true;
 
