@@ -90,7 +90,7 @@ namespace Atlas
             public bool AutoUpdate { get; set; } = true;
             public bool AutoInstall { get; set; } = false;  // скачивать и запускать установщик автоматически
             public string LastUpdateCheck { get; set; } = "";
-            public string UpdateRepo { get; set; } = "";   //例如 owner/repo
+            public string UpdateRepo { get; set; } = "werkot20000009853-bot/Atlas-Browser";
         }
 
         // Категория правил блокировщика
@@ -1399,13 +1399,31 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
         protected override void WndProc(ref Message m)
         {
             const int WM_NCHITTEST = 0x0084;
-            if (m.Msg == WM_NCHITTEST && WindowState == FormWindowState.Normal)
+            if (m.Msg == WM_NCHITTEST)
             {
-                base.WndProc(ref m);
-                if ((int)m.Result == 0x0001) // HTCLIENT
+                Point screen = new Point(m.LParam.ToInt32() & 0xFFFF, (m.LParam.ToInt32() >> 16) & 0xFFFF);
+                Point p = PointToClient(screen);
+
+                // Перетаскивание за панель заголовка (и за пустые места панели вкладок)
+                if (p.Y >= 0 && p.Y < 34 && WindowState != FormWindowState.Maximized)
                 {
-                    Point screen = new Point(m.LParam.ToInt32() & 0xFFFF, (m.LParam.ToInt32() >> 16) & 0xFFFF);
-                    Point p = PointToClient(screen);
+                    m.Result = (IntPtr)0x0002; // HTCAPTION
+                    return;
+                }
+                if (p.Y >= 34 && p.Y < 78 && WindowState != FormWindowState.Maximized)
+                {
+                    // область вкладок — разрешаем перетаскивание только если не попали в саму вкладку
+                    Control hit = GetChildAtPoint(p);
+                    if (hit == null || hit == tabsHeaderPanel)
+                    {
+                        m.Result = (IntPtr)0x0002;
+                        return;
+                    }
+                }
+
+                base.WndProc(ref m);
+                if ((int)m.Result == 0x0001 && WindowState == FormWindowState.Normal) // HTCLIENT
+                {
                     const int d = 7;
                     bool left = p.X <= d, right = p.X >= ClientSize.Width - d;
                     bool top = p.Y <= d, bottom = p.Y >= ClientSize.Height - d;
@@ -3324,12 +3342,40 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
         }
 
         // ==================== НАСТРОЙКИ ПРИЛОЖЕНИЯ ====================
+        // Тёмный ComboBox с собственной отрисовкой
+        private ComboBox CreateDarkCombo(int left, int top, int width, string[] items, int selected)
+        {
+            var cb = new ComboBox
+            {
+                Location = new Point(left, top),
+                Width = width,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                DrawMode = DrawMode.OwnerDrawFixed,
+                ItemHeight = 24,
+                BackColor = Color.FromArgb(10, 22, 42),
+                ForeColor = TextMain,
+                Font = new Font("Segoe UI", 9.5F),
+                Cursor = Cursors.Hand
+            };
+            cb.Items.AddRange(items);
+            if (selected >= 0 && selected < items.Length) cb.SelectedIndex = selected;
+            cb.DrawItem += (s, e) =>
+            {
+                e.DrawBackground();
+                string text = e.Index >= 0 ? cb.Items[e.Index].ToString() : "";
+                Color c = (e.State & DrawItemState.Selected) != 0 ? Color.White : TextMain;
+                TextRenderer.DrawText(e.Graphics, text, cb.Font, e.Bounds, c,
+                    TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding);
+            };
+            return cb;
+        }
+
         private void OpenAppSettings()
         {
             using var form = new Form
             {
                 Text = "Atlas — Настройки",
-                Width = 500, Height = 450,
+                Width = 650, Height = 520,
                 StartPosition = FormStartPosition.CenterParent,
                 BackColor = Color.FromArgb(3, 7, 17),
                 ForeColor = TextMain,
@@ -3337,38 +3383,28 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                 ShowIcon = false
             };
 
-            Label lTheme = new Label { Text = "Тема:", Location = new Point(24, 24), AutoSize = true };
-            ComboBox cbTheme = new ComboBox
-            {
-                Location = new Point(110, 20), Width = 200,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                BackColor = Color.FromArgb(10, 22, 42), ForeColor = TextMain
-            };
-            cbTheme.Items.AddRange(new object[] { "Тёмная", "Светлая" });
-            cbTheme.SelectedIndex = appSettings.Theme == "light" ? 1 : 0;
+            int labelW = 180, fieldX = 200, fieldW = 380;
 
-            Label lSearch = new Label { Text = "Поисковик:", Location = new Point(24, 64), AutoSize = true };
-            ComboBox cbSearch = new ComboBox
-            {
-                Location = new Point(110, 60), Width = 200,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                BackColor = Color.FromArgb(10, 22, 42), ForeColor = TextMain
-            };
-            cbSearch.Items.AddRange(new object[] { "Google", "DuckDuckGo", "Bing", "Yandex" });
-            cbSearch.SelectedIndex = new[] { "google", "duckduckgo", "bing", "yandex" }
-                .ToList().IndexOf(appSettings.SearchEngine?.ToLowerInvariant() ?? "google");
-            if (cbSearch.SelectedIndex < 0) cbSearch.SelectedIndex = 0;
+            Label lTheme = new Label { Text = "Тема:", Location = new Point(24, 24), Width = labelW, AutoSize = false, ForeColor = TextMain };
+            ComboBox cbTheme = CreateDarkCombo(fieldX, 20, fieldW, new[] { "Тёмная", "Светлая" },
+                appSettings.Theme == "light" ? 1 : 0);
 
-            Label lFolder = new Label { Text = "Папка загрузок:", Location = new Point(24, 104), AutoSize = true };
+            Label lSearch = new Label { Text = "Поисковик:", Location = new Point(24, 64), Width = labelW, AutoSize = false };
+            var engines = new[] { "google", "duckduckgo", "bing", "yandex" };
+            ComboBox cbSearch = CreateDarkCombo(fieldX, 60, fieldW, new[] { "Google", "DuckDuckGo", "Bing", "Yandex" },
+                Math.Max(0, engines.ToList().IndexOf(appSettings.SearchEngine?.ToLowerInvariant() ?? "google")));
+
+            Label lFolder = new Label { Text = "Папка загрузок:", Location = new Point(24, 104), Width = labelW, AutoSize = false };
             TextBox tbFolder = new TextBox
             {
-                Location = new Point(110, 100), Width = 250,
+                Location = new Point(fieldX, 100), Width = 330,
                 Text = appSettings.DownloadFolder,
-                BackColor = Color.FromArgb(10, 22, 42), ForeColor = TextMain
+                BackColor = Color.FromArgb(10, 22, 42), ForeColor = TextMain,
+                BorderStyle = BorderStyle.FixedSingle
             };
             Button btnBrowse = new Button
             {
-                Text = "...", Location = new Point(366, 100), Size = new Size(30, 22),
+                Text = "...", Location = new Point(fieldX + 338, 100), Size = new Size(42, 23),
                 FlatStyle = FlatStyle.Flat, BackColor = Surface, ForeColor = TextMain
             };
             btnBrowse.FlatAppearance.BorderSize = 0;
@@ -3381,40 +3417,39 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
             CheckBox cbAutoUpdate = new CheckBox
             {
                 Text = "Проверять обновления при запуске",
-                Location = new Point(24, 140), AutoSize = true,
-                Checked = appSettings.AutoUpdate
+                Location = new Point(24, 144), AutoSize = true
             };
+            cbAutoUpdate.Checked = appSettings.AutoUpdate;
             CheckBox cbAutoInstall = new CheckBox
             {
                 Text = "Скачивать и запускать установщик автоматически",
-                Location = new Point(24, 160), AutoSize = true,
-                Checked = appSettings.AutoInstall
+                Location = new Point(24, 170), AutoSize = true
             };
+            cbAutoInstall.Checked = appSettings.AutoInstall;
 
-            Label lRepo = new Label { Text = "Репозиторий обновлений:", Location = new Point(24, 175), AutoSize = true };
+            Label lRepo = new Label { Text = "Репозиторий обновлений:", Location = new Point(24, 204), Width = labelW, AutoSize = false };
             TextBox tbRepo = new TextBox
             {
-                Location = new Point(24, 197), Width = 300,
+                Location = new Point(fieldX, 200), Width = fieldW,
                 Text = appSettings.UpdateRepo,
                 BackColor = Color.FromArgb(10, 22, 42), ForeColor = TextMain,
-                PlaceholderText = "owner/repo"
+                BorderStyle = BorderStyle.FixedSingle
             };
             Label repoHint = new Label
             {
-                Text = "Например: anomalyco/opencode — откуда брать последние релизы",
-                Location = new Point(24, 224), AutoSize = true,
+                Text = "Релиз GitHub, откуда брать обновления (например: owner/repo)",
+                Location = new Point(fieldX, 226), AutoSize = true,
                 ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F)
             };
             Button btnCheckNow = new Button
             {
-                Text = "Проверить сейчас", Location = new Point(334, 195), Size = new Size(130, 28),
+                Text = "Проверить сейчас", Location = new Point(fieldX, 254), Size = new Size(160, 30),
                 FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(28, 70, 128), ForeColor = Color.White,
                 Cursor = Cursors.Hand
             };
             btnCheckNow.FlatAppearance.BorderSize = 0;
             btnCheckNow.Click += (s, e) =>
             {
-                // Сохраняем введённое значение перед проверкой
                 appSettings.UpdateRepo = tbRepo.Text.Trim();
                 appSettings.AutoUpdate = cbAutoUpdate.Checked;
                 SaveAppSettings();
@@ -3423,18 +3458,19 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
 
             Button btnSave = new Button
             {
-                Text = "Сохранить", Location = new Point(24, 270), Size = new Size(160, 32),
+                Text = "Сохранить", Location = new Point(24, 320), Size = new Size(180, 34),
                 FlatStyle = FlatStyle.Flat, BackColor = Accent, ForeColor = Color.White,
-                DialogResult = DialogResult.OK
+                DialogResult = DialogResult.OK, Cursor = Cursors.Hand
             };
             btnSave.FlatAppearance.BorderSize = 0;
 
-            form.Controls.AddRange(new Control[] { lTheme, cbTheme, lSearch, cbSearch, lFolder, tbFolder, btnBrowse, cbAutoUpdate, cbAutoInstall, lRepo, tbRepo, repoHint, btnCheckNow, btnSave });
+            form.Controls.AddRange(new Control[] { lTheme, cbTheme, lSearch, cbSearch, lFolder, tbFolder, btnBrowse,
+                cbAutoUpdate, cbAutoInstall, lRepo, tbRepo, repoHint, btnCheckNow, btnSave });
             ApplyDarkTitle(form, "Atlas — Настройки");
             if (form.ShowDialog(this) == DialogResult.OK)
             {
                 appSettings.Theme = cbTheme.SelectedIndex == 1 ? "light" : "dark";
-                appSettings.SearchEngine = new[] { "google", "duckduckgo", "bing", "yandex" }[cbSearch.SelectedIndex];
+                appSettings.SearchEngine = engines[cbSearch.SelectedIndex];
                 appSettings.DownloadFolder = tbFolder.Text.Trim();
                 appSettings.AutoUpdate = cbAutoUpdate.Checked;
                 appSettings.AutoInstall = cbAutoInstall.Checked;
