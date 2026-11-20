@@ -48,7 +48,7 @@ namespace Atlas
         // Единый HTTP-клиент для всех сетевых запросов (избегаем исчерпания сокетов)
         private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
 
-        private const string AppVersion = "1.0.5";
+        private const string AppVersion = "1.0.6";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
         // Современные иконки (Segoe MDL2 Assets — встроен в Windows 10/11)
@@ -2743,8 +2743,8 @@ namespace Atlas
 
                 Log($"Update downloaded: {temp}");
 
-                // Если скачан ZIP — распаковываем и ищем Atlas.exe
-                string runFile = temp;
+                // Распаковываем архив (если это ZIP) и находим папку с новыми файлами
+                string sourceDir;
                 if (temp.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                 {
                     string extractDir = Path.Combine(Path.GetTempPath(), "AtlasUpdate_" + tag);
@@ -2756,17 +2756,46 @@ namespace Atlas
                         MessageBox.Show("В архиве не найден Atlas.exe.", "Atlas — Обновления", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
-                    runFile = exe;
+                    sourceDir = Path.GetDirectoryName(exe);
+                }
+                else
+                {
+                    // Одиночный .exe — кладём его в отдельную папку
+                    sourceDir = Path.Combine(Path.GetTempPath(), "AtlasUpdate_" + tag);
+                    if (Directory.Exists(sourceDir)) Directory.Delete(sourceDir, true);
+                    Directory.CreateDirectory(sourceDir);
+                    File.Copy(temp, Path.Combine(sourceDir, "Atlas.exe"), true);
                 }
 
+                string appDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
+
                 var run = MessageBox.Show(
-                    $"Обновление загружено:\n{runFile}\n\nЗапустить новую версию? Текущее окно будет закрыто.",
+                    "Обновление загружено.\n\nТекущее окно закроется, файлы будут заменены в папке браузера, и Atlas перезапустится.\nПродолжить?",
                     "Atlas — Обновления", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
-                if (run == DialogResult.Yes)
+                if (run != DialogResult.Yes) return;
+
+                // Создаём BAT-скрипт: ждёт закрытия Atlas, копирует файлы поверх и перезапускает
+                string batPath = Path.Combine(Path.GetTempPath(), "atlas_update_" + Guid.NewGuid().ToString("N") + ".bat");
+                string script =
+                    "@echo off\r\n" +
+                    ":wait\r\n" +
+                    "tasklist /FI \"IMAGENAME eq Atlas.exe\" 2>NUL | find /I \"Atlas.exe\" >NUL\r\n" +
+                    "if \"%ERRORLEVEL%\"==\"0\" ( timeout /t 1 /nobreak >NUL & goto wait )\r\n" +
+                    "timeout /t 1 /nobreak >NUL\r\n" +
+                    $"xcopy /E /Y /Q /H /R \"{sourceDir}\\*\" \"{appDir}\\\" >NUL\r\n" +
+                    $"start \"\" \"{appDir}\\Atlas.exe\"\r\n" +
+                    $"del \"{temp}\" >NUL 2>&1\r\n" +
+                    $"rmdir /S /Q \"{sourceDir}\" >NUL 2>&1\r\n" +
+                    "del \"%~f0\" >NUL 2>&1\r\n";
+                File.WriteAllText(batPath, script);
+                Log($"Update script: {batPath}; source={sourceDir}; target={appDir}");
+
+                Process.Start(new ProcessStartInfo("cmd.exe", "/C \"" + batPath + "\"")
                 {
-                    Process.Start(new ProcessStartInfo(runFile) { UseShellExecute = true });
-                    Application.Exit();
-                }
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                Application.Exit();
             }
             catch (Exception ex)
             {
