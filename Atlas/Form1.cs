@@ -3217,16 +3217,21 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                 string fileName = null;
                 if (root.TryGetProperty("assets", out var assets))
                 {
-                    foreach (var a in assets.EnumerateArray())
+                    // Сначала ищем .exe, затем .zip (архив со сборкой Atlas)
+                    foreach (var ext in new[] { ".exe", ".zip" })
                     {
-                        string n = a.TryGetProperty("name", out var np) ? np.GetString() ?? "" : "";
-                        if (n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                            !n.EndsWith(".blockmap", StringComparison.OrdinalIgnoreCase))
+                        foreach (var a in assets.EnumerateArray())
                         {
-                            downloadUrl = a.TryGetProperty("browser_download_url", out var up) ? up.GetString() : null;
-                            fileName = n;
-                            break;
+                            string n = a.TryGetProperty("name", out var np) ? np.GetString() ?? "" : "";
+                            if (n.EndsWith(ext, StringComparison.OrdinalIgnoreCase) &&
+                                !n.EndsWith(".blockmap", StringComparison.OrdinalIgnoreCase))
+                            {
+                                downloadUrl = a.TryGetProperty("browser_download_url", out var up) ? up.GetString() : null;
+                                fileName = n;
+                                break;
+                            }
                         }
+                        if (downloadUrl != null) break;
                     }
                 }
 
@@ -3267,12 +3272,29 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                 }
 
                 Log($"Update downloaded: {temp}");
+
+                // Если скачан ZIP — распаковываем и ищем Atlas.exe
+                string runFile = temp;
+                if (temp.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    string extractDir = Path.Combine(Path.GetTempPath(), "AtlasUpdate_" + tag);
+                    if (Directory.Exists(extractDir)) Directory.Delete(extractDir, true);
+                    System.IO.Compression.ZipFile.ExtractToDirectory(temp, extractDir);
+                    string exe = Directory.GetFiles(extractDir, "Atlas.exe", SearchOption.AllDirectories).FirstOrDefault();
+                    if (string.IsNullOrEmpty(exe))
+                    {
+                        MessageBox.Show("В архиве не найден Atlas.exe.", "Atlas — Обновления", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    runFile = exe;
+                }
+
                 var run = MessageBox.Show(
-                    $"Обновление загружено:\n{temp}\n\nЗапустить установщик? Текущее окно будет закрыто.",
+                    $"Обновление загружено:\n{runFile}\n\nЗапустить новую версию? Текущее окно будет закрыто.",
                     "Atlas — Обновления", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
                 if (run == DialogResult.Yes)
                 {
-                    Process.Start(new ProcessStartInfo(temp) { UseShellExecute = true });
+                    Process.Start(new ProcessStartInfo(runFile) { UseShellExecute = true });
                     Application.Exit();
                 }
             }
