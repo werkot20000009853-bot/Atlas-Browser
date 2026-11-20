@@ -55,7 +55,7 @@ namespace Atlas
         // Логирование
         private readonly string logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "atlas.log");
 
-        private const string AppVersion = "1.0.0";
+        private const string AppVersion = "1.0.1";
 
         // ---------- Космическая цветовая палитра Atlas ----------
         private static readonly Color SpaceDark   = Color.FromArgb(2, 5, 12);   // фон формы
