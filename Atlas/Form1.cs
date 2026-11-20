@@ -25,6 +25,8 @@ namespace Atlas
         private TextBox txtUrl;
         private Button btnBack, btnForward, btnRefresh, btnHome, btnHistory, btnBookmarks, btnAddBookmark, btnGo, btnNewTab, btnDownloads;
         private CoreWebView2Environment webEnvironment;
+        private CoreWebView2Environment incognitoEnvironment;
+        private string incognitoProfileDir;
 
         private Panel activeBrowserContainer = null;
         private Panel activeTabContainer = null;
@@ -48,7 +50,7 @@ namespace Atlas
         // Единый HTTP-клиент для всех сетевых запросов (избегаем исчерпания сокетов)
         private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
 
-        private const string AppVersion = "1.0.6";
+        private const string AppVersion = "1.0.7";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
         // Современные иконки (Segoe MDL2 Assets — встроен в Windows 10/11)
@@ -99,7 +101,7 @@ namespace Atlas
         }
 
         // Настройки приложения
-        private class AppSettings
+        internal class AppSettings
         {
             public string Theme { get; set; } = "dark";       // dark / light
             public string SearchEngine { get; set; } = "google"; // google / duckduckgo / bing / yandex
@@ -108,6 +110,7 @@ namespace Atlas
             public bool AutoInstall { get; set; } = false;  // скачивать и запускать установщик автоматически
             public string LastUpdateCheck { get; set; } = "";
             public string UpdateRepo { get; set; } = "werkot20000009853-bot/Atlas-Browser";
+            public bool SingleProcessMode { get; set; } = false; // false = стабильный режим (много процессов)
         }
 
         // Категория правил блокировщика
@@ -471,14 +474,14 @@ namespace Atlas
             }
         }
 
-        private class HistoryItem
+        internal class HistoryItem
         {
             public string Url { get; set; }
             public string Title { get; set; }
             public string Time { get; set; }
         }
 
-        private class BookmarkItem
+        internal class BookmarkItem
         {
             public string Url { get; set; }
             public string Title { get; set; }
@@ -532,13 +535,57 @@ namespace Atlas
 
         private async void InitializeAsync()
         {
+            string singleProcessArg = appSettings.SingleProcessMode ? "--single-process " : "";
             var options = new CoreWebView2EnvironmentOptions(
-                additionalBrowserArguments: "--single-process --disable-sync --disable-background-networking --disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen,msEdgePromo,msDefaultBrowserPromo,PromoBrowser,ChromeWhatsNewUI,msEdgeWhatsNew,msEdgeUptake --disable-default-browser-check --no-first-run --no-default-browser-check"
+                additionalBrowserArguments: singleProcessArg + "--disable-sync --disable-background-networking --disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen,msEdgePromo,msDefaultBrowserPromo,PromoBrowser,ChromeWhatsNewUI,msEdgeWhatsNew,msEdgeUptake --disable-default-browser-check --no-first-run --no-default-browser-check"
             );
             options.AreBrowserExtensionsEnabled = true;
 
             webEnvironment = await CoreWebView2Environment.CreateAsync(null, null, options);
+
+            // Отдельный профиль для инкогнито — во Temp, удаляется при выходе
+            string incArg = appSettings.SingleProcessMode ? "--single-process " : "";
+            var incOptions = new CoreWebView2EnvironmentOptions(
+                additionalBrowserArguments: incArg + "--disable-sync --disable-background-networking --disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen,msEdgePromo,msDefaultBrowserPromo,PromoBrowser,ChromeWhatsNewUI,msEdgeWhatsNew,msEdgeUptake --disable-default-browser-check --no-first-run --no-default-browser-check"
+            );
+            incOptions.AreBrowserExtensionsEnabled = true;
+            incognitoProfileDir = Path.Combine(Path.GetTempPath(), "AtlasIncognito_" + Guid.NewGuid().ToString("N"));
+            incognitoEnvironment = await CoreWebView2Environment.CreateAsync(null, incognitoProfileDir, incOptions);
+
             AddNewTab(HomePageUrl);
+        }
+
+        // Полная очистка временного инкогнито-профиля (cookies, localStorage, кеш)
+        private async Task ResetIncognitoProfileAsync()
+        {
+            try
+            {
+                incognitoEnvironment = null;
+                if (!string.IsNullOrEmpty(incognitoProfileDir))
+                {
+                    // WebView2 держит файлы — даём время освободить
+                    for (int i = 0; i < 10; i++)
+                    {
+                        try
+                        {
+                            if (Directory.Exists(incognitoProfileDir))
+                                Directory.Delete(incognitoProfileDir, true);
+                            break;
+                        }
+                        catch { await Task.Delay(200); }
+                    }
+                }
+
+                string incArg = appSettings.SingleProcessMode ? "--single-process " : "";
+                var incOptions = new CoreWebView2EnvironmentOptions(
+                    additionalBrowserArguments: incArg + "--disable-sync --disable-background-networking --disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen,msEdgePromo,msDefaultBrowserPromo,PromoBrowser,ChromeWhatsNewUI,msEdgeWhatsNew,msEdgeUptake --disable-default-browser-check --no-first-run --no-default-browser-check"
+                );
+                incOptions.AreBrowserExtensionsEnabled = true;
+                incognitoProfileDir = Path.Combine(Path.GetTempPath(), "AtlasIncognito_" + Guid.NewGuid().ToString("N"));
+                incognitoEnvironment = await CoreWebView2Environment.CreateAsync(null, incognitoProfileDir, incOptions);
+                Log("Incognito profile reset");
+            }
+            catch (Exception ex) { Log("Incognito reset error", ex); }
         }
 
         private string BuildHomePageUrl()
@@ -1087,14 +1134,20 @@ namespace Atlas
             btnIncognito = CreateNavButton(IcoIncognito, 28);
             btnIncognito.Left = 90;
             btnIncognito.Top = 56;
-            btnIncognito.Click += (s, e) =>
+            btnIncognito.Click += async (s, e) =>
             {
+                bool wasIncognito = incognitoMode;
                 incognitoMode = !incognitoMode;
                 btnIncognito.ForeColor = incognitoMode ? Accent : TextMuted;
+
+                // При выходе из инкогнито — полностью удаляем временный профиль
+                if (wasIncognito && !incognitoMode)
+                    await ResetIncognitoProfileAsync();
+
                 MessageBox.Show(
                     incognitoMode
-                        ? "Режим инкогнито включён.\nИстория и закладки не сохраняются."
-                        : "Режим инкогнито выключен.\nИстория и закладки снова сохраняются.",
+                        ? "Режим инкогнито включён.\nИстория, закладки и cookies не сохраняются.\nОткройте новую вкладку — она будет приватной."
+                        : "Режим инкогнито выключен.\nВсе данные инкогнито удалены.",
                     "Atlas", MessageBoxButtons.OK, MessageBoxIcon.Information);
             };
 
@@ -1121,7 +1174,20 @@ namespace Atlas
             btnExtensions = CreateNavButton(IcoExtension, 28);
             btnExtensions.Left = 258;
             btnExtensions.Top = 56;
-            btnExtensions.Click += (s, e) => OpenExtensions();
+            btnExtensions.Click += (s, e) =>
+            {
+                var wv = GetCurrentWebView();
+                ExtensionsHost.Open(this, wv, ApplyDarkTitle, () =>
+                {
+                    foreach (Control c in contentPanel.Controls)
+                    {
+                        if (c is Panel p && p.Controls.Count > 0 && p.Controls[0] is WebView2 w)
+                        {
+                            try { w.CoreWebView2?.Reload(); } catch { }
+                        }
+                    }
+                });
+            };
 
             navPanel.Controls.Add(btnRefresh);
             navPanel.Controls.Add(btnHome);
@@ -1330,6 +1396,25 @@ namespace Atlas
         }
 
         // Позволяет менять размер окна за края даже без системной рамки
+        protected override async void OnFormClosing(FormClosingEventArgs e)
+        {
+            // Удаляем временный инкогнито-профиль при выходе
+            try
+            {
+                incognitoEnvironment = null;
+                if (!string.IsNullOrEmpty(incognitoProfileDir) && Directory.Exists(incognitoProfileDir))
+                {
+                    for (int i = 0; i < 10; i++)
+                    {
+                        try { Directory.Delete(incognitoProfileDir, true); break; }
+                        catch { await Task.Delay(200); }
+                    }
+                }
+            }
+            catch (Exception ex) { Log("Incognito cleanup on exit error", ex); }
+            base.OnFormClosing(e);
+        }
+
         protected override void WndProc(ref Message m)
         {
             const int WM_NCHITTEST = 0x0084;
@@ -1629,140 +1714,28 @@ namespace Atlas
 
         private void OpenBookmarksTab()
         {
-            // Обновить countLabel для закладок
-            int newCount = bookmarks.Count;
-            for (int i = 0; i < tabsHeaderPanel.Controls.Count; i++)
-            {
-                var ctrl = tabsHeaderPanel.Controls[i];
-                if (ctrl is Label label)
-                {
-                    // Переустановить текст для новых закладок
-                    label.Text = newCount.ToString();
-                    break;
-                }
-            }
-            
-            StringBuilder html = new StringBuilder();
-            html.Append("<html><head><meta charset='utf-8'><title>Закладки</title>");
-            html.Append("<style>");
-            html.Append("body { background-color: #202024; color: #f0f0f5; font-family: 'Segoe UI', Arial, sans-serif; padding: 30px 50px; margin: 0; }");
-            html.Append(".header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px; }");
-            html.Append("h1 { font-size: 26px; font-weight: 600; margin: 0; }");
-            html.Append(".item { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; background: #2a2a30; border: 1px solid #3f3f46; }");
-            html.Append(".item:hover { background: #32323a; }");
-            html.Append(".info { display: flex; flex-direction: column; overflow: hidden; padding-right: 20px; }");
-            html.Append(".title { color: #38bdf8; font-size: 15px; font-weight: 500; text-decoration: none; margin-bottom: 4px; }");
-            html.Append(".title:hover { text-decoration: underline; }");
-            html.Append(".url { color: #9ca3af; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }");
-            html.Append(".empty { color: #888; font-style: italic; margin-top: 20px; }");
-            html.Append("</style></head><body>");
-
-            html.Append("<div class='header'><h1>⭐ Закладки</h1></div>");
-
-            if (bookmarks.Count == 0)
-            {
-                html.Append("<p class='empty'>У вас пока нет закладок. Нажмите на значок звездочки (☆) на панели навигации, чтобы добавить сайт.</p>");
-            }
-            else
-            {
-                html.Append("<div>");
-                foreach (var b in bookmarks)
-                {
-                    html.Append($"<div class='item'>");
-                    html.Append($"<div class='info'>");
-                    html.Append($"<a href='{H(b.Url)}' class='title'>{H(b.Title)}</a>");
-                    html.Append($"<span class='url'>{H(b.Url)}</span>");
-                    html.Append($"</div>");
-                    html.Append($"</div>");
-                }
-                html.Append("</div>");
-            }
-
-            html.Append("</body></html>");
-
-            string encodedHtml = "data:text/html;charset=utf-8," + Uri.EscapeDataString(html.ToString());
-            AddNewTab(encodedHtml);
+            UpdateTabCount(bookmarks.Count);
+            AddNewTab(PageTemplates.BuildBookmarksPage(bookmarks));
         }
 
         private void OpenHistoryTab()
         {
-            // Обновить countLabel для истории
-            int newCount = visitHistory.Count;
+            UpdateTabCount(visitHistory.Count);
+            AddNewTab(PageTemplates.BuildHistoryPage(visitHistory, historyClearToken));
+        }
+
+        private void UpdateTabCount(int count)
+        {
             for (int i = 0; i < tabsHeaderPanel.Controls.Count; i++)
             {
-                var ctrl = tabsHeaderPanel.Controls[i];
-                if (ctrl is Label label)
+                if (tabsHeaderPanel.Controls[i] is Label label)
                 {
-                    // Переустановить текст для новых записей
-                    label.Text = newCount.ToString();
+                    label.Text = count.ToString();
                     break;
                 }
             }
-            
-            StringBuilder html = new StringBuilder();
-            html.Append("<html><head><meta charset='utf-8'><title>Журнал</title>");
-            html.Append("<style>");
-            html.Append("body { background-color: #202024; color: #f0f0f5; font-family: 'Segoe UI', Arial, sans-serif; padding: 30px 50px; margin: 0; }");
-            html.Append(".header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px; }");
-            html.Append("h1 { font-size: 26px; font-weight: 600; margin: 0; }");
-            html.Append(".clear-btn { background: #dc2626; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 600; }");
-            html.Append(".clear-btn:hover { background: #b91c1c; }");
-            html.Append(".search-box { width: 100%; max-width: 600px; padding: 10px 15px; background: #2a2a30; border: 1px solid #3f3f46; border-radius: 6px; color: #fff; font-size: 14px; outline: none; margin-bottom: 20px; }");
-            html.Append(".search-box:focus { border-color: #007acc; }");
-            html.Append(".item { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 6px; margin-bottom: 6px; background: transparent; }");
-            html.Append(".item:hover { background: #2a2a32; }");
-            html.Append(".info { display: flex; flex-direction: column; overflow: hidden; padding-right: 20px; }");
-            html.Append(".title { color: #e4e4e7; font-size: 14px; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }");
-            html.Append(".title:hover { color: #38bdf8; text-decoration: underline; }");
-            html.Append(".url { color: #9ca3af; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }");
-            html.Append(".time { color: #9ca3af; font-size: 13px; white-space: nowrap; }");
-            html.Append(".empty { color: #888; font-style: italic; margin-top: 20px; }");
-            html.Append("</style>");
-            html.Append("<script>");
-            html.Append("function filterHistory() {");
-            html.Append("  let input = document.getElementById('searchInput').value.toLowerCase();");
-            html.Append("  let items = document.getElementsByClassName('item');");
-            html.Append("  for (let i = 0; i < items.length; i++) {");
-            html.Append("    let text = items[i].innerText.toLowerCase();");
-            html.Append("    items[i].style.display = text.includes(input) ? 'flex' : 'none';");
-            html.Append("  }");
-            html.Append("}");
-            html.Append("function clearHistory() {");
-            html.Append("  window.chrome.webview.postMessage('clear:" + historyClearToken + "');");
-            html.Append("}");
-            html.Append("</script>");
-            html.Append("</head><body>");
-
-            html.Append("<div class='header'><h1>🕒 Журнал</h1><button class='clear-btn' onclick='clearHistory()'>Очистить историю</button></div>");
-            html.Append("<input type='text' id='searchInput' class='search-box' placeholder='Поиск в журнале...' onkeyup='filterHistory()'>");
-
-            if (visitHistory.Count == 0)
-            {
-                html.Append("<p class='empty'>Журнал пуст.</p>");
-            }
-            else
-            {
-                html.Append("<div id='historyList'>");
-                for (int i = visitHistory.Count - 1; i >= 0; i--)
-                {
-                    var h = visitHistory[i];
-                    string displayTitle = string.IsNullOrEmpty(h.Title) ? h.Url : h.Title;
-                    html.Append($"<div class='item'>");
-                    html.Append($"<div class='info'>");
-                    html.Append($"<a href='{H(h.Url)}' class='title'>{H(displayTitle)}</a>");
-                    html.Append($"<span class='url'>{H(h.Url)}</span>");
-                    html.Append($"</div>");
-                    html.Append($"<span class='time'>{H(h.Time)}</span>");
-                    html.Append($"</div>");
-                }
-                html.Append("</div>");
-            }
-
-            html.Append("</body></html>");
-
-            string encodedHtml = "data:text/html;charset=utf-8," + Uri.EscapeDataString(html.ToString());
-            AddNewTab(encodedHtml);
         }
+
 
         private void OpenDownloadManager()
         {
@@ -2807,302 +2780,12 @@ namespace Atlas
 
         // ==================== НАСТРОЙКИ ПРИЛОЖЕНИЯ ====================
         // Тёмный ComboBox с собственной отрисовкой
-        private ComboBox CreateDarkCombo(int left, int top, int width, string[] items, int selected)
-        {
-            var cb = new ComboBox
-            {
-                Location = new Point(left, top),
-                Width = width,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                DrawMode = DrawMode.OwnerDrawFixed,
-                ItemHeight = 24,
-                BackColor = Color.FromArgb(10, 22, 42),
-                ForeColor = TextMain,
-                Font = new Font("Segoe UI", 9.5F),
-                Cursor = Cursors.Hand
-            };
-            cb.Items.AddRange(items);
-            if (selected >= 0 && selected < items.Length) cb.SelectedIndex = selected;
-            cb.DrawItem += (s, e) =>
-            {
-                e.DrawBackground();
-                string text = e.Index >= 0 ? cb.Items[e.Index].ToString() : "";
-                Color c = (e.State & DrawItemState.Selected) != 0 ? Color.White : TextMain;
-                TextRenderer.DrawText(e.Graphics, text, cb.Font, e.Bounds, c,
-                    TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding);
-            };
-            return cb;
-        }
-
-        // ==================== РАСШИРЕНИЯ CHROME ====================
-        private class ExtensionsForm : Form
-        {
-            private readonly CoreWebView2Profile profile;
-            private readonly ListBox list;
-            private readonly Label status;
-            private List<CoreWebView2BrowserExtension> extensions = new List<CoreWebView2BrowserExtension>();
-
-            public ExtensionsForm(CoreWebView2Profile profile, Action<Form, string> darkHeader)
-            {
-                this.profile = profile;
-                Text = "Atlas — Расширения";
-                Width = 560;
-                Height = 460;
-                StartPosition = FormStartPosition.CenterParent;
-                BackColor = Color.FromArgb(3, 7, 17);
-                ForeColor = TextMain;
-                Font = new Font("Segoe UI", 9.5F);
-                ShowIcon = false;
-
-                Label info = new Label
-                {
-                    Text = "Установленные расширения Chrome (распакованные из папки):",
-                    Location = new Point(24, 56), AutoSize = true, ForeColor = TextMuted
-                };
-
-                list = new ListBox
-                {
-                    Location = new Point(24, 82), Size = new Size(494, 200),
-                    BackColor = Color.FromArgb(10, 22, 42), ForeColor = TextMain,
-                    BorderStyle = BorderStyle.FixedSingle
-                };
-
-                Button addBtn = MakeButton("Установить из папки", 24, 300, 180, Color.FromArgb(28, 70, 128));
-                addBtn.Click += async (s, e) => await InstallExtension();
-
-                Button toggleBtn = MakeButton("Вкл / Выкл", 214, 300, 130, Surface);
-                toggleBtn.Click += async (s, e) => await ToggleExtension();
-
-                Button removeBtn = MakeButton("Удалить", 354, 300, 120, Color.FromArgb(70, 30, 35));
-                removeBtn.Click += async (s, e) => await RemoveExtension();
-
-                Button refreshBtn = MakeButton("Обновить список", 24, 342, 180, Surface);
-                refreshBtn.Click += async (s, e) => await RefreshExtensions();
-
-                status = new Label
-                {
-                    Location = new Point(24, 390), Size = new Size(494, 40),
-                    ForeColor = Accent, Font = new Font("Segoe UI", 9F),
-                    Text = ""
-                };
-
-                Controls.Add(info);
-                Controls.Add(list);
-                Controls.Add(addBtn);
-                Controls.Add(toggleBtn);
-                Controls.Add(removeBtn);
-                Controls.Add(refreshBtn);
-                Controls.Add(status);
-
-                darkHeader(this, "Atlas — Расширения");
-                _ = RefreshExtensions();
-            }
-
-            private Button MakeButton(string text, int left, int top, int width, Color back)
-            {
-                var b = new Button
-                {
-                    Text = text, Location = new Point(left, top), Size = new Size(width, 32),
-                    FlatStyle = FlatStyle.Flat, BackColor = back, ForeColor = Color.White,
-                    Font = new Font("Segoe UI", 9F, FontStyle.Bold), Cursor = Cursors.Hand
-                };
-                b.FlatAppearance.BorderSize = 0;
-                return b;
-            }
-
-            private CoreWebView2BrowserExtension Selected =>
-                list.SelectedIndex >= 0 && list.SelectedIndex < extensions.Count ? extensions[list.SelectedIndex] : null;
-
-            private async Task RefreshExtensions()
-            {
-                try
-                {
-                    extensions = (await profile.GetBrowserExtensionsAsync()).ToList();
-                    list.Items.Clear();
-                    foreach (var ext in extensions)
-                        list.Items.Add($"{ext.Name}  [{(ext.IsEnabled ? "вкл" : "выкл")}]  — {ext.Id}");
-                    status.Text = $"Найдено расширений: {extensions.Count}";
-                }
-                catch (Exception ex) { status.Text = "Ошибка: " + ex.Message; }
-            }
-
-            private async Task InstallExtension()
-            {
-                using var fbd = new FolderBrowserDialog
-                {
-                    Description = "Выберите папку с распакованным расширением (там есть manifest.json)"
-                };
-                if (fbd.ShowDialog() != DialogResult.OK) return;
-                try
-                {
-                    status.Text = "Установка...";
-                    await profile.AddBrowserExtensionAsync(fbd.SelectedPath);
-                    await RefreshExtensions();
-                    status.Text = "Расширение установлено. Перезапустите вкладки, если оно не активировалось.";
-                    OnExtensionsChanged?.Invoke();
-                }
-                catch (Exception ex) { status.Text = "Ошибка установки: " + ex.Message; }
-            }
-
-            private async Task ToggleExtension()
-            {
-                var ext = Selected;
-                if (ext == null) { status.Text = "Выберите расширение."; return; }
-                try
-                {
-                    await ext.EnableAsync(!ext.IsEnabled);
-                    await RefreshExtensions();
-                    OnExtensionsChanged?.Invoke();
-                }
-                catch (Exception ex) { status.Text = "Ошибка: " + ex.Message; }
-            }
-
-            private async Task RemoveExtension()
-            {
-                var ext = Selected;
-                if (ext == null) { status.Text = "Выберите расширение."; return; }
-                try
-                {
-                    await ext.RemoveAsync();
-                    await RefreshExtensions();
-                    OnExtensionsChanged?.Invoke();
-                }
-                catch (Exception ex) { status.Text = "Ошибка: " + ex.Message; }
-            }
-
-            public Action OnExtensionsChanged = () => { };
-        }
-
-        private void OpenExtensions()
-        {
-            var wv = GetCurrentWebView();
-            if (wv == null)
-            {
-                MessageBox.Show("Браузер ещё инициализируется.", "Atlas — Расширения", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            using var form = new ExtensionsForm(wv.Profile, ApplyDarkTitle);
-            form.OnExtensionsChanged = () =>
-            {
-                // Перезагружаем открытые вкладки, чтобы расширение применилось
-                foreach (Control c in contentPanel.Controls)
-                {
-                    if (c is Panel p && p.Controls.Count > 0 && p.Controls[0] is WebView2 w)
-                    {
-                        try { w.CoreWebView2?.Reload(); } catch (Exception ex) { Log("Reload after extension error", ex); }
-                    }
-                }
-            };
-            form.ShowDialog(this);
-        }
-
         private void OpenAppSettings()
         {
-            using var form = new Form
-            {
-                Text = "Atlas — Настройки",
-                Width = 650, Height = 520,
-                StartPosition = FormStartPosition.CenterParent,
-                BackColor = Color.FromArgb(3, 7, 17),
-                ForeColor = TextMain,
-                Font = new Font("Segoe UI", 9.5F),
-                ShowIcon = false
-            };
-
-            int labelW = 180, fieldX = 200, fieldW = 380;
-
-            Label lTheme = new Label { Text = "Тема:", Location = new Point(24, 24), Width = labelW, AutoSize = false, ForeColor = TextMain };
-            ComboBox cbTheme = CreateDarkCombo(fieldX, 20, fieldW, new[] { "Тёмная", "Светлая" },
-                appSettings.Theme == "light" ? 1 : 0);
-
-            Label lSearch = new Label { Text = "Поисковик:", Location = new Point(24, 64), Width = labelW, AutoSize = false };
-            var engines = new[] { "google", "duckduckgo", "bing", "yandex" };
-            ComboBox cbSearch = CreateDarkCombo(fieldX, 60, fieldW, new[] { "Google", "DuckDuckGo", "Bing", "Yandex" },
-                Math.Max(0, engines.ToList().IndexOf(appSettings.SearchEngine?.ToLowerInvariant() ?? "google")));
-
-            Label lFolder = new Label { Text = "Папка загрузок:", Location = new Point(24, 104), Width = labelW, AutoSize = false };
-            TextBox tbFolder = new TextBox
-            {
-                Location = new Point(fieldX, 100), Width = 330,
-                Text = appSettings.DownloadFolder,
-                BackColor = Color.FromArgb(10, 22, 42), ForeColor = TextMain,
-                BorderStyle = BorderStyle.FixedSingle
-            };
-            Button btnBrowse = new Button
-            {
-                Text = "...", Location = new Point(fieldX + 338, 100), Size = new Size(42, 23),
-                FlatStyle = FlatStyle.Flat, BackColor = Surface, ForeColor = TextMain
-            };
-            btnBrowse.FlatAppearance.BorderSize = 0;
-            btnBrowse.Click += (s, e) =>
-            {
-                using var fbd = new FolderBrowserDialog();
-                if (fbd.ShowDialog() == DialogResult.OK) tbFolder.Text = fbd.SelectedPath;
-            };
-
-            CheckBox cbAutoUpdate = new CheckBox
-            {
-                Text = "Проверять обновления при запуске",
-                Location = new Point(24, 144), AutoSize = true
-            };
-            cbAutoUpdate.Checked = appSettings.AutoUpdate;
-            CheckBox cbAutoInstall = new CheckBox
-            {
-                Text = "Скачивать и запускать установщик автоматически",
-                Location = new Point(24, 170), AutoSize = true
-            };
-            cbAutoInstall.Checked = appSettings.AutoInstall;
-
-            Label lRepo = new Label { Text = "Репозиторий обновлений:", Location = new Point(24, 204), Width = labelW, AutoSize = false };
-            Label tbRepo = new Label
-            {
-                Location = new Point(fieldX, 200), Width = fieldW, Height = 26,
-                Text = UpdateRepoFixed,
-                ForeColor = Accent,
-                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-            Label repoHint = new Label
-            {
-                Text = "Официальный репозиторий Atlas (изменению не подлежит)",
-                Location = new Point(fieldX, 226), AutoSize = true,
-                ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F)
-            };
-            Button btnCheckNow = new Button
-            {
-                Text = "Проверить сейчас", Location = new Point(fieldX, 254), Size = new Size(160, 30),
-                FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(28, 70, 128), ForeColor = Color.White,
-                Cursor = Cursors.Hand
-            };
-            btnCheckNow.FlatAppearance.BorderSize = 0;
-            btnCheckNow.Click += (s, e) =>
-            {
-                appSettings.AutoUpdate = cbAutoUpdate.Checked;
-                SaveAppSettings();
-                _ = CheckForUpdatesAsync(true);
-            };
-
-            Button btnSave = new Button
-            {
-                Text = "Сохранить", Location = new Point(24, 320), Size = new Size(180, 34),
-                FlatStyle = FlatStyle.Flat, BackColor = Accent, ForeColor = Color.White,
-                DialogResult = DialogResult.OK, Cursor = Cursors.Hand
-            };
-            btnSave.FlatAppearance.BorderSize = 0;
-
-            form.Controls.AddRange(new Control[] { lTheme, cbTheme, lSearch, cbSearch, lFolder, tbFolder, btnBrowse,
-                cbAutoUpdate, cbAutoInstall, lRepo, tbRepo, repoHint, btnCheckNow, btnSave });
-            ApplyDarkTitle(form, "Atlas — Настройки");
-            if (form.ShowDialog(this) == DialogResult.OK)
-            {
-                appSettings.Theme = cbTheme.SelectedIndex == 1 ? "light" : "dark";
-                appSettings.SearchEngine = engines[cbSearch.SelectedIndex];
-                appSettings.DownloadFolder = tbFolder.Text.Trim();
-                appSettings.AutoUpdate = cbAutoUpdate.Checked;
-                appSettings.AutoInstall = cbAutoInstall.Checked;
-                SaveAppSettings();
-                ApplyTheme();
-            }
+            using var form = new SettingsForm(appSettings, ApplyDarkTitle,
+                () => { SaveAppSettings(); ApplyTheme(); });
+            form.ShowDialog(this);
         }
     }
 }
+

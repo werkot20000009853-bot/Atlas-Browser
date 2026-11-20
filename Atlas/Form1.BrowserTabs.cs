@@ -104,9 +104,10 @@ namespace Atlas
 
             activateAction();
 
-            if (webEnvironment != null)
+            var activeEnv = incognitoMode ? incognitoEnvironment : webEnvironment;
+            if (activeEnv != null)
             {
-                await webView.EnsureCoreWebView2Async(webEnvironment);
+                await webView.EnsureCoreWebView2Async(activeEnv);
 
                 AttachContextMenu(webView);
 
@@ -121,7 +122,7 @@ namespace Atlas
                             sessionBlockedCount++;
                             blocker.BlockedCount++;
                             // Возвращаем пустой ответ — запрос отменён
-                            var response = webEnvironment.CreateWebResourceResponse(
+                            var response = activeEnv.CreateWebResourceResponse(
                                 new MemoryStream(), 204, "No Content", "");
                             args.Response = response;
                         }
