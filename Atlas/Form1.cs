@@ -48,7 +48,7 @@ namespace Atlas
         // Единый HTTP-клиент для всех сетевых запросов (избегаем исчерпания сокетов)
         private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
 
-        private const string AppVersion = "1.0.3";
+        private const string AppVersion = "1.0.4";
 
         // Современные иконки (Segoe MDL2 Assets — встроен в Windows 10/11)
         private const string IconFont = "Segoe MDL2 Assets";
