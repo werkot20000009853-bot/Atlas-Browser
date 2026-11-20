@@ -114,6 +114,10 @@ namespace Atlas
             {
                 await webView.EnsureCoreWebView2Async(activeEnv);
 
+                // Обычный User-Agent — Google/YouTube блокируют вход из WebView2 с/ed heres UA
+                try { webView.CoreWebView2.Settings.UserAgent = BrowserUserAgent; }
+                catch (Exception ex) { Log("User-Agent error", ex); }
+
                 AttachContextMenu(webView);
 
                 // Встроенный блокировщик: перехватываем все сетевые запросы

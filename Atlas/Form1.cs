@@ -68,7 +68,8 @@ namespace Atlas
             return client;
         }
 
-        private const string AppVersion = "1.0.12";
+        private const string AppVersion = "1.0.13";
+        private const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
         // Современные иконки (Segoe MDL2 Assets — встроен в Windows 10/11)
@@ -555,7 +556,7 @@ namespace Atlas
         {
             string singleProcessArg = appSettings.SingleProcessMode ? "--single-process " : "";
             var options = new CoreWebView2EnvironmentOptions(
-                additionalBrowserArguments: singleProcessArg + "--disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen --no-first-run"
+                additionalBrowserArguments: singleProcessArg + "--disable-component-update --disable-default-apps --disable-features=msEdgeSidebarV2,msEdgeSplitScreen --no-first-run"
             );
             options.AreBrowserExtensionsEnabled = true;
 
@@ -564,7 +565,7 @@ namespace Atlas
             // Отдельный профиль для инкогнито — во Temp, удаляется при выходе
             string incArg = appSettings.SingleProcessMode ? "--single-process " : "";
             var incOptions = new CoreWebView2EnvironmentOptions(
-                additionalBrowserArguments: incArg + "--disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen --no-first-run"
+                additionalBrowserArguments: incArg + "--disable-component-update --disable-default-apps --disable-features=msEdgeSidebarV2,msEdgeSplitScreen --no-first-run"
             );
             incOptions.AreBrowserExtensionsEnabled = true;
             incognitoProfileDir = Path.Combine(Path.GetTempPath(), "AtlasIncognito_" + Guid.NewGuid().ToString("N"));
@@ -596,7 +597,7 @@ namespace Atlas
 
                 string incArg = appSettings.SingleProcessMode ? "--single-process " : "";
                 var incOptions = new CoreWebView2EnvironmentOptions(
-                    additionalBrowserArguments: incArg + "--disable-component-update --disable-default-apps --enable-low-end-device-mode --disable-features=msEdgeSidebarV2,msEdgeSplitScreen --no-first-run"
+                    additionalBrowserArguments: incArg + "--disable-component-update --disable-default-apps --disable-features=msEdgeSidebarV2,msEdgeSplitScreen --no-first-run"
                 );
                 incOptions.AreBrowserExtensionsEnabled = true;
                 incognitoProfileDir = Path.Combine(Path.GetTempPath(), "AtlasIncognito_" + Guid.NewGuid().ToString("N"));
