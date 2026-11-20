@@ -584,6 +584,16 @@ body {
 .search button svg { width:22px; height:22px; }
 .search button:hover { background:rgba(90, 140, 220, .16); color:#8ab4ff; }
 .search button:active { background:rgba(90, 140, 220, .28); }
+.search-wrap { position:relative; width:min(700px,92vw); }
+.suggest-box { position:absolute; top:calc(100% + 6px); left:0; right:0; border-radius:16px; background:rgba(13, 24, 44, .98); border:1px solid rgba(120, 170, 250, .28); box-shadow:0 10px 40px rgba(0,0,0,.5); backdrop-filter:blur(20px); overflow:hidden; display:none; z-index:50; }
+.suggest-box.show { display:block; }
+.suggest-item { display:flex; align-items:center; gap:12px; padding:11px 20px; color:#dbe7fb; font-size:14px; cursor:pointer; transition:background .12s; }
+.suggest-item:hover, .suggest-item.active { background:rgba(90, 140, 220, .18); }
+.suggest-item .sicon { color:#7ea6dd; flex:none; display:flex; }
+.suggest-item .sicon svg { width:16px; height:16px; }
+.suggest-item .stext { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.suggest-item .sarrow { color:#5f7799; font-size:16px; opacity:0; }
+.suggest-item:hover .sarrow, .suggest-item.active .sarrow { opacity:1; }
 .shortcuts { display:flex; gap:20px; margin-top:52px; flex-wrap:wrap; justify-content:center; }
 .shortcut { width:120px; height:118px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-decoration:none; color:#c7d6ea; border:1px solid rgba(140, 170, 205, .14); border-radius:22px; background:linear-gradient(145deg, rgba(20,40,70,.6), rgba(12,22,44,.6)); backdrop-filter:blur(12px); transition:.3s; position:relative; overflow:hidden; }
 .shortcut::before { content:''; position:absolute; inset:0; border-radius:22px; background:linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent); opacity:0; transition:.3s; }
@@ -607,8 +617,9 @@ body {
     <div class='clock' id='clock'></div>
     <div class='logo'>ATLAS</div>
     <div class='subtitle'>explore the universe</div>
-    <form class='search' action='https://www.google.com/search' method='GET'>
-        <input type='text' name='q' placeholder='Что ищете во вселенной...' autocomplete='off' autofocus>
+    <div class='search-wrap'>
+    <form class='search' action='https://www.google.com/search' method='GET' id='searchForm'>
+        <input type='text' name='q' id='searchInput' placeholder='Что ищете во вселенной...' autocomplete='off' autofocus>
         <button type='submit' aria-label='Поиск'>
             <svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'>
                 <circle cx='10.5' cy='10.5' r='6.5' stroke='currentColor' stroke-width='2'/>
@@ -616,6 +627,8 @@ body {
             </svg>
         </button>
     </form>
+    <div id='suggestBox' class='suggest-box'></div>
+    </div>
     <div class='shortcuts'>
         <a class='shortcut' href='https://www.youtube.com'><span class='icon'>▶</span><span>YouTube</span></a>
         <a class='shortcut' href='https://www.google.com'><span class='icon'>⌕</span><span>Google</span></a>
@@ -632,6 +645,53 @@ function resize(){w=canvas.width=window.innerWidth;h=canvas.height=window.innerH
 function animate(){ctx.clearRect(0,0,w,h);for(let i=0;i<stars.length;i++){let s=stars[i];s.x+=s.vx;s.y+=s.vy;if(s.x<0||s.x>w){s.x=Math.random()*w;}if(s.y<0||s.y>h){s.y=Math.random()*h;}let opacity=.25+Math.abs(Math.sin(s.phase+performance.now()/900))*.75;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle='rgba(200,225,255,'+opacity+')';ctx.fill();for(let j=i+1;j<stars.length;j++){let b=stars[j],dx=b.x-s.x,dy=b.y-s.y,d=Math.sqrt(dx*dx+dy*dy);if(d<115){ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(b.x,b.y);ctx.strokeStyle='rgba(110,160,240,'+((1-d/115)*.14)+')';ctx.stroke();}}}raf=requestAnimationFrame(animate);}
 function updateClock(){document.getElementById('clock').textContent=new Date().toLocaleString('ru-RU',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'});}
 window.addEventListener('resize',resize);resize();animate();updateClock();setInterval(updateClock,30000);
+
+// --- Подсказки поиска (как в Google) ---
+const sInput=document.getElementById('searchInput');
+const sBox=document.getElementById('suggestBox');
+const sForm=document.getElementById('searchForm');
+let sItems=[]; let sIndex=-1; let sTimer=null; let sSeq=0;
+const searchIcon=`<svg viewBox='0 0 24 24' fill='none'><circle cx='10.5' cy='10.5' r='6.5' stroke='currentColor' stroke-width='2'/><path d='M15.5 15.5L21 21' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg>`;
+const arrowIcon=`<svg viewBox='0 0 24 24' fill='none'><path d='M7 17L17 7M9 7h8v8' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>`;
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function hideSuggest(){sBox.classList.remove('show');sBox.innerHTML='';sItems=[];sIndex=-1;}
+function renderSuggest(items){
+  sItems=items||[]; sIndex=-1;
+  if(!sItems.length){hideSuggest();return;}
+  sBox.innerHTML=sItems.map((t,i)=>`<div class='suggest-item' data-i='${i}'><span class='sicon'>${searchIcon}</span><span class='stext'>${esc(t)}</span><span class='sarrow'>${arrowIcon}</span></div>`).join('');
+  sBox.classList.add('show');
+  sBox.querySelectorAll('.suggest-item').forEach(el=>{
+    el.addEventListener('mousedown',ev=>{ev.preventDefault();pickSuggest(parseInt(el.dataset.i));});
+  });
+}
+function pickSuggest(i){
+  if(i<0||i>=sItems.length)return;
+  sInput.value=sItems[i]; hideSuggest();
+  try{window.chrome.webview.postMessage('suggest-pick:'+sInput.value);}catch(e){}
+  sForm.submit();
+}
+function moveSel(dir){
+  if(!sItems.length)return;
+  sIndex=(sIndex+dir+sItems.length)%sItems.length;
+  sBox.querySelectorAll('.suggest-item').forEach((el,i)=>el.classList.toggle('active',i===sIndex));
+  if(sIndex>=0) sInput.value=sItems[sIndex];
+}
+sInput.addEventListener('input',()=>{
+  clearTimeout(sTimer);
+  const q=sInput.value.trim();
+  if(!q){hideSuggest();return;}
+  sTimer=setTimeout(()=>{
+    try{window.chrome.webview.postMessage('suggest:'+q);}catch(e){}
+  },140);
+});
+sInput.addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'){e.preventDefault();moveSel(1);}
+  else if(e.key==='ArrowUp'){e.preventDefault();moveSel(-1);}
+  else if(e.key==='Escape'){hideSuggest();}
+});
+sInput.addEventListener('blur',()=>{setTimeout(hideSuggest,180);});
+// C# вызывает эту функцию, когда подсказки пришли из Google
+window.__atlasShowSuggestions=function(items){renderSuggest(items);};
 </script>
 </body>
 </html>";
@@ -2044,6 +2104,22 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
                     string msg = e.TryGetWebMessageAsString();
                     if (string.IsNullOrEmpty(msg)) return;
 
+                    // Подсказки поиска с домашней страницы (data:text/html)
+                    if (msg.StartsWith("suggest:"))
+                    {
+                        string query = msg.Substring("suggest:".Length);
+                        if (!string.IsNullOrWhiteSpace(query))
+                            _ = FetchSuggestionsAsync(webView, query);
+                        return;
+                    }
+                    if (msg.StartsWith("suggest-pick:"))
+                    {
+                        // Пользователь выбрал подсказку — запоминаем в истории поиска
+                        string picked = msg.Substring("suggest-pick:".Length);
+                        Log("Search picked: " + picked);
+                        return;
+                    }
+
                     // Команда очистки истории — только от нашей страницы «Журнал»
                     bool fromHistoryPage = webView.CoreWebView2.Source != null &&
                                            webView.CoreWebView2.Source.StartsWith("data:text/html") &&
@@ -2847,6 +2923,39 @@ window.addEventListener('resize',resize);resize();animate();updateClock();setInt
 
             var currentWebView = GetCurrentWebView();
             currentWebView?.Navigate(targetUrl);
+        }
+
+        // Получает подсказки от Google Suggest и отправляет их на домашнюю страницу
+        private async Task FetchSuggestionsAsync(WebView2 webView, string query)
+        {
+            try
+            {
+                string url = "https://suggestqueries.google.com/complete/search?client=chrome&hl=ru&q=" + Uri.EscapeDataString(query);
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                http.DefaultRequestHeaders.Add("User-Agent", "Atlas-Browser");
+                string json = await http.GetStringAsync(url);
+
+                using var doc = JsonDocument.Parse(json);
+                var list = new List<string>();
+                if (doc.RootElement.ValueKind == JsonValueKind.Array && doc.RootElement.GetArrayLength() > 1)
+                {
+                    var arr = doc.RootElement[1];
+                    foreach (var item in arr.EnumerateArray())
+                    {
+                        string s = item.GetString();
+                        if (!string.IsNullOrEmpty(s)) list.Add(s);
+                    }
+                }
+
+                // Передаём подсказки в JS страницы
+                string jsArray = "[" + string.Join(",", list.Select(s => "\"" +
+                    s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", " ") + "\"")) + "]";
+                await webView.ExecuteScriptAsync("window.__atlasShowSuggestions && window.__atlasShowSuggestions(" + jsArray + ");");
+            }
+            catch (Exception ex)
+            {
+                Log("FetchSuggestions error", ex);
+            }
         }
 
         private string GetSearchUrl(string query)
