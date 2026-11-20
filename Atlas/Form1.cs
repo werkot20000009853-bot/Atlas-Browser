@@ -68,7 +68,7 @@ namespace Atlas
             return client;
         }
 
-        private const string AppVersion = "1.0.13";
+        private const string AppVersion = "1.0.14";
         private const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
@@ -88,6 +88,7 @@ namespace Atlas
         private const string IcoPicker    = "\uE7B3";
         private const string IcoSettings  = "\uE713";
         private const string IcoExtension = "\uE9E7"; // пазл-расширение
+        private const string IcoExternal = "\uE71B"; // открыть во внешнем приложении
         private const string IcoClose     = "\uE711";
         private const string IcoMin       = "\uE70D";
         private const string IcoMax       = "\uE737";
@@ -536,6 +537,7 @@ namespace Atlas
         private Button btnPicker;
         private Button btnSettings;
         private Button btnExtensions;
+        private Button btnSystemLogin;
         private bool pickerMode = false;
         private string currentPageUrl = "";
 
@@ -1193,6 +1195,12 @@ namespace Atlas
             btnExtensions = CreateNavButton(IcoExtension, 28);
             btnExtensions.Left = 258;
             btnExtensions.Top = 56;
+            // Вход в Google/YouTube через системный браузер
+            btnSystemLogin = CreateNavButton(IcoExternal, 28);
+            btnSystemLogin.Left = 300;
+            btnSystemLogin.Top = 56;
+            btnSystemLogin.Click += (s, e) => OpenInSystemBrowser();
+
             btnExtensions.Click += (s, e) =>
             {
                 var wv = GetCurrentWebView();
@@ -1224,6 +1232,7 @@ namespace Atlas
             navPanel.Controls.Add(btnPicker);
             navPanel.Controls.Add(btnSettings);
             navPanel.Controls.Add(btnExtensions);
+            navPanel.Controls.Add(btnSystemLogin);
 
             navPanel.Resize += (s, e) =>
             {
@@ -2731,19 +2740,11 @@ namespace Atlas
                     string body = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
                     if (body.Length > 900) body = body.Substring(0, 900) + "…";
 
-                    string question = appSettings.AutoInstall
-                        ? "Скачать и установить обновление автоматически?"
-                        : "Открыть страницу загрузки?";
                     var result = MessageBox.Show(
-                        $"Доступна новая версия Atlas: {tag}\nТекущая: {AppVersion}\n\n{body}\n\n{question}",
+                        $"Доступна новая версия Atlas: {tag}\nТекущая: {AppVersion}\n\n{body}\n\nСкачать и установить обновление?",
                         "Atlas — Доступно обновление", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
                     if (result == DialogResult.Yes)
-                    {
-                        if (appSettings.AutoInstall)
-                            await DownloadAndInstallUpdate(root, tag);
-                        else if (!string.IsNullOrEmpty(releaseUrl))
-                            Process.Start(new ProcessStartInfo(releaseUrl) { UseShellExecute = true });
-                    }
+                        await DownloadAndInstallUpdate(root, tag);
                 }
                 else if (showResultEvenIfNoUpdate)
                 {
@@ -2892,6 +2893,37 @@ namespace Atlas
                 Log("DownloadAndInstallUpdate error", ex);
                 MessageBox.Show("Не удалось скачать обновление:\n" + ex.Message,
                     "Atlas — Обновления", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // Открыть текущий сайт (или страницу входа Google) в системном браузере
+        private void OpenInSystemBrowser()
+        {
+            string url = null;
+            var wv = GetCurrentWebView();
+            if (wv?.Source != null)
+            {
+                string src = wv.Source;
+                if (!src.StartsWith("data:") && !src.StartsWith("about:"))
+                    url = src;
+            }
+            if (string.IsNullOrEmpty(url)) url = "https://accounts.google.com/";
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                Log("Opened in system browser: " + url);
+                MessageBox.Show(
+                    "Страница открыта в системном браузере.\n\nВойдите в Google/YouTube там, затем вернитесь в Atlas — " +
+                    "если профиль общий, сессия может подхватиться автоматически.\n\n" +
+                    "Если нет — используйте системный браузер для входа, а Atlas для просмотра.",
+                    "Atlas — Вход", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                Log("OpenInSystemBrowser error", ex);
+                MessageBox.Show("Не удалось открыть системный браузер:\n" + ex.Message,
+                    "Atlas", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
