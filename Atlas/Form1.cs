@@ -1182,11 +1182,17 @@ namespace Atlas
                 using var pen = new Pen(BorderCol, 1);
                 g.DrawLine(pen, 0, titleBar.Height - 1, titleBar.Width, titleBar.Height - 1);
 
-                // Иконка приложения (та, что была в системном заголовке)
-                using (var appIcon = SystemIcons.Application)
+                // Иконка приложения 🌌
+                try
                 {
-                    g.DrawIcon(appIcon, new Rectangle(10, 7, 18, 18));
+                    string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "App.ico");
+                    if (File.Exists(iconPath))
+                    {
+                        using var appIcon = new Icon(iconPath, 18, 18);
+                        g.DrawIcon(appIcon, new Rectangle(10, 7, 18, 18));
+                    }
                 }
+                catch (Exception ex) { Log("Title icon error", ex); }
 
                 // Текст заголовка
                 TextRenderer.DrawText(

@@ -6,6 +6,7 @@
 		<UseWindowsForms>true</UseWindowsForms>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<ApplicationIcon>App.ico</ApplicationIcon>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -14,6 +15,7 @@
 
 	<ItemGroup>
 		<EmbeddedResource Include="HomePage.html" />
+		<None Include="App.ico" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 
 </Project>
