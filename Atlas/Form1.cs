@@ -68,7 +68,7 @@ namespace Atlas
             return client;
         }
 
-        private const string AppVersion = "1.0.11";
+        private const string AppVersion = "1.0.12";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
         // Современные иконки (Segoe MDL2 Assets — встроен в Windows 10/11)
@@ -2788,12 +2788,24 @@ namespace Atlas
 
                 if (string.IsNullOrEmpty(downloadUrl))
                 {
-                    MessageBox.Show("В релизе не найден установщик .exe.\nОткройте страницу загрузки вручную.",
+                    MessageBox.Show("В релизе не найден архив со сборкой.\nОткройте страницу загрузки вручную.",
                         "Atlas — Обновления", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
-                string temp = Path.Combine(Path.GetTempPath(), fileName);
+                string temp = Path.Combine(Path.GetTempPath(),
+                    "atlas_" + Guid.NewGuid().ToString("N") + "_" + fileName);
+
+                // Чистим старые временные файлы обновления, чтобы не засорять Temp
+                try
+                {
+                    foreach (var old in Directory.GetFiles(Path.GetTempPath(), "atlas_*_" + fileName))
+                    {
+                        try { File.Delete(old); } catch { }
+                    }
+                }
+                catch { }
+
                 var proceed = MessageBox.Show(
                     $"Найден установщик: {fileName}\nНачать загрузку? (это может занять несколько минут)",
                     "Atlas — Обновления", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
