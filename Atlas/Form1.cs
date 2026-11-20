@@ -31,22 +31,12 @@ namespace Atlas
         private readonly List<DownloadEntry> downloads = new List<DownloadEntry>();
         private DownloadManagerForm downloadManagerForm;
 
-        // Статус-бар
-        private Label statusLabel;
-        private ProgressBar loadProgress;
-
-        // Умная адресная строка
-        private ListBox suggestionsList;
-        private bool suppressSuggestions = false;
-
         // Поиск по странице
         private Panel findPanel;
         private TextBox findBox;
 
-        // Закреплённые вкладки и предпросмотр
+        // Закреплённые вкладки
         private readonly Dictionary<Panel, bool> pinnedTabs = new Dictionary<Panel, bool>();
-        private Panel hoveredTab;
-        private System.Windows.Forms.Timer tabHoverTimer;
 
         // Настройки приложения
         private AppSettings appSettings = new AppSettings();
@@ -54,6 +44,9 @@ namespace Atlas
 
         // Логирование
         private readonly string logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "atlas.log");
+
+        // Единый HTTP-клиент для всех сетевых запросов (избегаем исчерпания сокетов)
+        private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
 
         private const string AppVersion = "1.0.1";
 
@@ -499,7 +492,6 @@ namespace Atlas
 
         // Режим инкогнито — история и закладки не сохраняются
         private bool incognitoMode = false;
-        private readonly byte[] dataEntropy = Encoding.UTF8.GetBytes("AtlasBrowser-DataProtection-v1");
 
         // Встроенный блокировщик рекламы и трекеров
         private readonly string blockerFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "blocker.dat");
@@ -532,7 +524,6 @@ namespace Atlas
             LoadBlockerSettings();
             InitializeBrowserControls();
             InitializeTitleBar();
-            InitializeTabInteractions();
             ApplyTheme();
             InitializeAsync();
             CheckForUpdatesOnStartup();
@@ -551,183 +542,21 @@ namespace Atlas
 
         private string BuildHomePageUrl()
         {
-            string html = @"
-<!DOCTYPE html>
-<html lang='ru'>
-<head>
-<meta charset='UTF-8'>
-<meta name='viewport' content='width=device-width, initial-scale=1.0'>
-<title>Atlas</title>
-<style>
-* { box-sizing: border-box; }
-html, body { margin:0; width:100%; min-height:100%; overflow-x:hidden; }
-body {
-    min-height:100vh; overflow:hidden; color:#eaf3ff;
-    font-family:'Segoe UI', 'Inter', Arial, sans-serif;
-    background:radial-gradient(ellipse at 50% 40%, #16325f 0%, #0b172f 45%, #050a17 100%);
-    background-attachment: fixed;
-}
-#space { position:fixed; inset:0; width:100%; height:100%; z-index:0; }
-.nebula { position:fixed; border-radius:50%; filter:blur(120px); opacity:.14; pointer-events:none; z-index:1; }
-.nebula.one { width:700px; height:380px; background:#174cba; top:-80px; left:-120px; animation:floatOne 12s ease-in-out infinite alternate; }
-.nebula.two { width:750px; height:400px; background:#812fba; bottom:-90px; right:-140px; animation:floatTwo 14s ease-in-out infinite alternate; }
-.nebula.three { width:500px; height:300px; background:#2ec4b6; top:40%; left:60%; opacity:.1; animation:floatThree 10s ease-in-out infinite alternate; }
-.content { position:relative; z-index:10; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:30px; text-align:center; }
-.logo { font-size:72px; font-weight:300; letter-spacing:16px; margin-bottom:6px; background:linear-gradient(135deg,#fff,#9db9ff,#b6a5ff); -webkit-background-clip:text; background-clip:text; color:transparent; filter:drop-shadow(0 0 25px rgba(80,150,255,.35)); animation:pulseLogo 4s ease-in-out infinite; }
-.subtitle { color:#9fb0d1; font-size:15px; letter-spacing:7px; margin-bottom:52px; text-transform:uppercase; opacity:.9; }
-.search { width:min(700px,92vw); height:58px; display:flex; align-items:center; padding:6px 8px 6px 24px; border-radius:32px; background:rgba(10, 20, 38, .88); border:1px solid rgba(120, 170, 250, .25); box-shadow:0 4px 24px rgba(0, 0, 0, .35); backdrop-filter:blur(20px); transition:box-shadow .2s, background .2s, border-color .2s; }
-.search:hover { background:rgba(14, 26, 48, .95); box-shadow:0 6px 30px rgba(0, 0, 0, .45); border-color:rgba(120, 170, 250, .4); }
-.search:focus-within { border-color:rgba(120, 170, 250, .55); box-shadow:0 6px 30px rgba(0, 0, 0, .45); background:rgba(16, 29, 52, .97); }
-.search input { flex:1; min-width:0; border:0; outline:0; background:transparent; color:#fff; font-size:16px; height:100%; }
-.search input::placeholder { color:#9aa9c0; }
-.search button { width:44px; height:44px; margin-left:8px; border:0; border-radius:50%; background:transparent; color:#9fb5d6; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .2s, color .2s; }
-.search button svg { width:22px; height:22px; }
-.search button:hover { background:rgba(90, 140, 220, .16); color:#8ab4ff; }
-.search button:active { background:rgba(90, 140, 220, .28); }
-.search-wrap { position:relative; width:min(700px,92vw); }
-.suggest-box { position:absolute; top:calc(100% + 6px); left:0; right:0; border-radius:16px; background:rgba(13, 24, 44, .98); border:1px solid rgba(120, 170, 250, .28); box-shadow:0 10px 40px rgba(0,0,0,.5); backdrop-filter:blur(20px); overflow:hidden; display:none; z-index:50; }
-.suggest-box.show { display:block; }
-.suggest-item { display:flex; align-items:center; gap:12px; padding:11px 20px; color:#dbe7fb; font-size:14px; cursor:pointer; transition:background .12s; }
-.suggest-item:hover, .suggest-item.active { background:rgba(90, 140, 220, .18); }
-.suggest-item .sicon { color:#7ea6dd; flex:none; display:flex; }
-.suggest-item .sicon svg { width:16px; height:16px; }
-.suggest-item .stext { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.suggest-item .sarrow { color:#5f7799; font-size:16px; opacity:0; }
-.suggest-item:hover .sarrow, .suggest-item.active .sarrow { opacity:1; }
-.shortcuts { display:flex; gap:20px; margin-top:52px; flex-wrap:wrap; justify-content:center; }
-.shortcut { width:120px; height:118px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-decoration:none; color:#c7d6ea; border:1px solid rgba(140, 170, 205, .14); border-radius:22px; background:linear-gradient(145deg, rgba(20,40,70,.6), rgba(12,22,44,.6)); backdrop-filter:blur(12px); transition:.3s; position:relative; overflow:hidden; }
-.shortcut::before { content:''; position:absolute; inset:0; border-radius:22px; background:linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent); opacity:0; transition:.3s; }
-.shortcut:hover::before { opacity:1; }
-.shortcut:hover { transform:translateY(-6px) scale(1.03); color:#fff; border-color:rgba(100,160,255,.5); box-shadow:0 12px 40px rgba(15, 50, 100, .35); }
-.shortcut .icon { font-size:30px; filter:drop-shadow(0 0 10px rgba(90,150,240,.4)); }
-.shortcut span:last-child { font-size:12.5px; letter-spacing:1px; opacity:.9; }
-.footer { position:absolute; bottom:26px; color:#5a7090; font-size:11px; letter-spacing:4px; text-transform:uppercase; opacity:.7; }
-.clock { margin-bottom:16px; color:#c9d6ea; font-size:15px; letter-spacing:2px; font-variant-numeric: tabular-nums; }
-@keyframes floatOne { from { transform: translate(0,0); } to { transform: translate(40px, -30px); } }
-@keyframes floatTwo { from { transform: translate(0,0); } to { transform: translate(-50px, 40px); } }
-@keyframes floatThree { from { transform: translate(0,0); } to { transform: translate(30px, -50px); } }
-@keyframes pulseLogo { 0%,100% { filter: drop-shadow(0 0 25px rgba(80,150,255,.35)); } 50% { filter: drop-shadow(0 0 45px rgba(140,180,255,.6)); } }
-@media(max-width:640px) { .logo {font-size:48px; letter-spacing:8px;} .subtitle {font-size:12px; letter-spacing:4px; margin-bottom:36px;} .shortcut {width:100px; height:100px;} .search {width:90vw;} }
-</style>
-</head>
-<body>
-<canvas id='space'></canvas>
-<div class='nebula one'></div><div class='nebula two'></div><div class='nebula three'></div>
-<div class='content'>
-    <div class='clock' id='clock'></div>
-    <div class='logo'>ATLAS</div>
-    <div class='subtitle'>explore the universe</div>
-    <div class='search-wrap'>
-    <form class='search' action='https://www.google.com/search' method='GET' id='searchForm'>
-        <input type='text' name='q' id='searchInput' placeholder='Что ищете во вселенной...' autocomplete='off' autofocus>
-        <button type='submit' aria-label='Поиск'>
-            <svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'>
-                <circle cx='10.5' cy='10.5' r='6.5' stroke='currentColor' stroke-width='2'/>
-                <path d='M15.5 15.5L21 21' stroke='currentColor' stroke-width='2' stroke-linecap='round'/>
-            </svg>
-        </button>
-    </form>
-    <div id='suggestBox' class='suggest-box'></div>
-    </div>
-    <div class='shortcuts'>
-        <a class='shortcut' href='https://www.youtube.com'><span class='icon'>▶</span><span>YouTube</span></a>
-        <a class='shortcut' href='https://www.google.com'><span class='icon'>⌕</span><span>Google</span></a>
-        <a class='shortcut' href='https://github.com'><span class='icon'>⌘</span><span>GitHub</span></a>
-        <a class='shortcut' href='https://mail.google.com'><span class='icon'>✉</span><span>Почта</span></a>
-    </div>
-    <div class='footer'>the universe is yours to explore</div>
-</div>
-<script>
-const canvas=document.getElementById('space');
-const ctx=canvas.getContext('2d');
-let stars=[],w=0,h=0,raf=0;
-function resize(){w=canvas.width=window.innerWidth;h=canvas.height=window.innerHeight;stars=[];for(let i=0;i<180;i++){stars.push({x:Math.random()*w,y:Math.random()*h,r:Math.random()*1.6+.4,a:Math.random(),vx:(Math.random()-.5)*.2,vy:(Math.random()-.5)*.2,phase:Math.random()*Math.PI*2});}}
-function animate(){ctx.clearRect(0,0,w,h);for(let i=0;i<stars.length;i++){let s=stars[i];s.x+=s.vx;s.y+=s.vy;if(s.x<0||s.x>w){s.x=Math.random()*w;}if(s.y<0||s.y>h){s.y=Math.random()*h;}let opacity=.25+Math.abs(Math.sin(s.phase+performance.now()/900))*.75;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle='rgba(200,225,255,'+opacity+')';ctx.fill();for(let j=i+1;j<stars.length;j++){let b=stars[j],dx=b.x-s.x,dy=b.y-s.y,d=Math.sqrt(dx*dx+dy*dy);if(d<115){ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(b.x,b.y);ctx.strokeStyle='rgba(110,160,240,'+((1-d/115)*.14)+')';ctx.stroke();}}}raf=requestAnimationFrame(animate);}
-function updateClock(){document.getElementById('clock').textContent=new Date().toLocaleString('ru-RU',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'});}
-window.addEventListener('resize',resize);resize();animate();updateClock();setInterval(updateClock,30000);
-
-// --- Подсказки поиска (как в Google) ---
-const sInput=document.getElementById('searchInput');
-const sBox=document.getElementById('suggestBox');
-const sForm=document.getElementById('searchForm');
-let sItems=[]; let sIndex=-1; let sTimer=null; let sSeq=0;
-const searchIcon=`<svg viewBox='0 0 24 24' fill='none'><circle cx='10.5' cy='10.5' r='6.5' stroke='currentColor' stroke-width='2'/><path d='M15.5 15.5L21 21' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg>`;
-const arrowIcon=`<svg viewBox='0 0 24 24' fill='none'><path d='M7 17L17 7M9 7h8v8' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>`;
-function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
-function hideSuggest(){sBox.classList.remove('show');sBox.innerHTML='';sItems=[];sIndex=-1;}
-function renderSuggest(items){
-  sItems=items||[]; sIndex=-1;
-  if(!sItems.length){hideSuggest();return;}
-  sBox.innerHTML=sItems.map((t,i)=>`<div class='suggest-item' data-i='${i}'><span class='sicon'>${searchIcon}</span><span class='stext'>${esc(t)}</span><span class='sarrow'>${arrowIcon}</span></div>`).join('');
-  sBox.classList.add('show');
-  sBox.querySelectorAll('.suggest-item').forEach(el=>{
-    el.addEventListener('mousedown',ev=>{ev.preventDefault();pickSuggest(parseInt(el.dataset.i));});
-  });
-}
-function pickSuggest(i){
-  if(i<0||i>=sItems.length)return;
-  sInput.value=sItems[i]; hideSuggest();
-  try{window.chrome.webview.postMessage('suggest-pick:'+sInput.value);}catch(e){}
-  sForm.submit();
-}
-function moveSel(dir){
-  if(!sItems.length)return;
-  sIndex=(sIndex+dir+sItems.length)%sItems.length;
-  sBox.querySelectorAll('.suggest-item').forEach((el,i)=>el.classList.toggle('active',i===sIndex));
-  if(sIndex>=0) sInput.value=sItems[sIndex];
-}
-sInput.addEventListener('input',()=>{
-  clearTimeout(sTimer);
-  const q=sInput.value.trim();
-  if(!q){hideSuggest();return;}
-  sTimer=setTimeout(()=>{
-    try{window.chrome.webview.postMessage('suggest:'+q);}catch(e){}
-  },140);
-});
-sInput.addEventListener('keydown',e=>{
-  if(e.key==='ArrowDown'){e.preventDefault();moveSel(1);}
-  else if(e.key==='ArrowUp'){e.preventDefault();moveSel(-1);}
-  else if(e.key==='Escape'){hideSuggest();}
-});
-sInput.addEventListener('blur',()=>{setTimeout(hideSuggest,180);});
-// C# вызывает эту функцию, когда подсказки пришли из Google
-window.__atlasShowSuggestions=function(items){renderSuggest(items);};
-</script>
-</body>
-</html>";
-            return "data:text/html;charset=utf-8," + Uri.EscapeDataString(html);
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            using var stream = asm.GetManifestResourceStream("Atlas.HomePage.html");
+            if (stream == null) { Log("HomePage.html resource missing"); return "about:blank"; }
+            using var reader = new StreamReader(stream);
+            return "data:text/html;charset=utf-8," + Uri.EscapeDataString(reader.ReadToEnd());
         }
 
         // --- Защищённое локальное хранилище (DPAPI, привязка к текущему пользователю Windows) ---
         private string ReadProtected(string path, string legacyPath)
         {
-            try
-            {
-                if (File.Exists(path))
-                {
-                    byte[] encrypted = File.ReadAllBytes(path);
-                    byte[] plain = ProtectedData.Unprotect(encrypted, dataEntropy, DataProtectionScope.CurrentUser);
-                    return Encoding.UTF8.GetString(plain);
-                }
-                // Миграция со старых незашифрованных .json файлов
-                if (File.Exists(legacyPath))
-                {
-                    string json = File.ReadAllText(legacyPath);
-                    WriteProtected(path, json);
-                    File.Delete(legacyPath);
-                    return json;
-                }
-            }
-            catch { }
-            return null;
+            if (legacyPath != null) return CryptoService.ReadProtectedWithLegacy(path, legacyPath);
+            return CryptoService.ReadProtected(path);
         }
 
-        private void WriteProtected(string path, string json)
-        {
-            byte[] plain = Encoding.UTF8.GetBytes(json);
-            byte[] encrypted = ProtectedData.Protect(plain, dataEntropy, DataProtectionScope.CurrentUser);
-            File.WriteAllBytes(path, encrypted);
-        }
+        private void WriteProtected(string path, string json) => CryptoService.WriteProtected(path, json);
 
         // --- Логирование ошибок в файл ---
         private void Log(string message, Exception ex = null)
@@ -840,7 +669,6 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
             bool light = appSettings.Theme == "light";
             this.BackColor = light ? Color.FromArgb(240, 244, 250) : SpaceDark;
             if (contentPanel != null) contentPanel.BackColor = this.BackColor;
-            if (statusLabel != null) statusLabel.ForeColor = light ? Color.FromArgb(40, 55, 75) : TextMuted;
         }
 
         private void LoadData()
@@ -869,14 +697,14 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
         {
             if (incognitoMode) return;
             try { WriteProtected(historyFilePath, JsonSerializer.Serialize(visitHistory)); }
-            catch { }
+            catch (Exception ex) { Log("SaveHistory error", ex); }
         }
 
         private void SaveBookmarks()
         {
             if (incognitoMode) return;
             try { WriteProtected(bookmarksFilePath, JsonSerializer.Serialize(bookmarks)); }
-            catch { }
+            catch (Exception ex) { Log("SaveBookmarks error", ex); }
         }
 
         // --- Настройки блокировщика (шифруются вместе с остальными данными) ---
@@ -1035,7 +863,7 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { Log("LoadBlockerSettings error", ex); }
 
             // Первый запуск — стандартные категории
             blocker = new BlockerSettings
@@ -1050,7 +878,7 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
         private void SaveBlockerSettings()
         {
             try { WriteProtected(blockerFilePath, JsonSerializer.Serialize(blocker)); }
-            catch { }
+            catch (Exception ex) { Log("SaveBlockerSettings error", ex); }
         }
 
         // Проверка, нужно ли блокировать запрос (только включённые категории)
@@ -1722,35 +1550,8 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
                 {
                     display = url;
                 }
-                txtUrl.Text = ElideText(display, txtUrl);
+                txtUrl.Text = UrlHelper.Elide(display, txtUrl);
             }
-        }
-
-        /// <summary>
-        /// Обрезает текст с многоточием, если он не помещается в ширину контрола.
-        /// </summary>
-        private string ElideText(string text, Control control)
-        {
-            if (string.IsNullOrEmpty(text)) return text;
-            using var font = new Font(control.Font.FontFamily, control.Font.Size, control.Font.Style, control.Font.Unit);
-            // Используем полную ширину клиентской области (без учёта padding — ClientSize уже включает)
-            int availableWidth = control.ClientSize.Width - 6;
-            SizeF size = TextRenderer.MeasureText(text, font);
-            if (size.Width <= availableWidth) return text;
-
-            // Иначе обрезаем с многоточием
-            string ellipsis = "…";
-            SizeF ellSize = TextRenderer.MeasureText(ellipsis, font);
-            int maxWidth = (int)(availableWidth - ellSize.Width);
-            int len = text.Length;
-            while (len > 0)
-            {
-                string candidate = text.Substring(0, len) + ellipsis;
-                if (TextRenderer.MeasureText(candidate, font).Width <= maxWidth)
-                    return candidate;
-                len--;
-            }
-            return ellipsis;
         }
 
         // Безопасное экранирование для вставки данных в HTML
@@ -1956,347 +1757,6 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
             AddNewTab(encodedHtml);
         }
 
-        private async void AddNewTab(string url)
-        {
-            Panel browserContainer = new Panel() { Dock = DockStyle.Fill, Visible = false };
-            WebView2 webView = new WebView2() { Dock = DockStyle.Fill };
-            browserContainer.Controls.Add(webView);
-            contentPanel.Controls.Add(browserContainer);
-
-            Panel tabContainer = new Panel()
-            {
-                Width = 180,
-                Height = 36,
-                Margin = new Padding(4, 4, 4, 0),
-                BackColor = Surface,
-                Cursor = Cursors.Hand
-            };
-            tabContainer.Paint += (s, e) =>
-            {
-                var g = e.Graphics;
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                bool active = activeBrowserContainer == browserContainer;
-                using var brush = new System.Drawing.Drawing2D.LinearGradientBrush(
-                    new Point(0, 0), new Point(0, tabContainer.Height),
-                    active ? Color.FromArgb(20, 44, 80) : Surface,
-                    active ? Color.FromArgb(14, 28, 52) : Color.FromArgb(8, 16, 32));
-                g.FillPath(brush, GetRoundRectPath(tabContainer.ClientRectangle, 10));
-                using var pen = new Pen(active ? Accent : BorderCol, 1.2f);
-                g.DrawPath(pen, GetRoundRectPath(tabContainer.ClientRectangle, 10));
-            };
-
-            Button tabButton = new Button()
-            {
-                Text = "  Загрузка...",
-                Width = 140,
-                Height = 36,
-                Top = 0,
-                Left = 0,
-                FlatStyle = FlatStyle.Flat,
-                ForeColor = TextMuted,
-                BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Font = new Font("Segoe UI", 9.5F, FontStyle.Regular)
-            };
-            tabButton.FlatAppearance.BorderSize = 0;
-            tabButton.Cursor = Cursors.Hand;
-
-            Button closeButton = new Button()
-            {
-                Text = IcoClose,
-                Width = 28,
-                Height = 28,
-                Top = 4,
-                Left = 143,
-                FlatStyle = FlatStyle.Flat,
-                ForeColor = TextMuted,
-                BackColor = Color.Transparent,
-                Font = new Font(IconFont, 11),
-                TextAlign = ContentAlignment.MiddleCenter,
-                Cursor = Cursors.Hand
-            };
-            closeButton.FlatAppearance.BorderSize = 0;
-            closeButton.MouseEnter += (s, e) => { closeButton.ForeColor = Color.FromArgb(255, 110, 110); closeButton.BackColor = Color.FromArgb(40, 10, 10); };
-            closeButton.MouseLeave += (s, e) => { closeButton.ForeColor = TextMuted; closeButton.BackColor = Color.Transparent; };
-
-            tabContainer.Controls.Add(tabButton);
-            tabContainer.Controls.Add(closeButton);
-
-            int newTabIdx = tabsHeaderPanel.Controls.Count - 1;
-            tabsHeaderPanel.Controls.Add(tabContainer);
-            tabsHeaderPanel.Controls.SetChildIndex(tabContainer, newTabIdx);
-
-            Action activateAction = () => SwitchTab(tabContainer, browserContainer, webView);
-            tabButton.Click += (s, e) => activateAction();
-            tabContainer.Click += (s, e) => activateAction();
-
-            closeButton.Click += (s, e) => {
-                CloseTab(tabContainer, browserContainer, webView);
-            };
-
-            // Закрепление вкладки по правому клику
-            var tabMenu = new ContextMenuStrip();
-            tabMenu.BackColor = Color.FromArgb(10, 22, 42);
-            tabMenu.ForeColor = TextMain;
-            var pinItem = new ToolStripMenuItem("Закрепить вкладку");
-            pinItem.Click += (s, e) => { TogglePinTab(tabContainer, tabButton); };
-            var closeItem = new ToolStripMenuItem("Закрыть вкладку");
-            closeItem.Click += (s, e) => { CloseTab(tabContainer, browserContainer, webView); };
-            tabMenu.Items.AddRange(new ToolStripItem[] { pinItem, closeItem });
-            tabContainer.ContextMenuStrip = tabMenu;
-
-            // Предпросмотр вкладки при наведении (через таймер)
-            tabContainer.MouseEnter += (s, e) =>
-            {
-                hoveredTab = tabContainer;
-                tabHoverTimer?.Start();
-            };
-            tabContainer.MouseLeave += (s, e) =>
-            {
-                hoveredTab = null;
-                tabHoverTimer?.Stop();
-                SetStatus("Готово");
-            };
-
-            activateAction();
-
-            if (webEnvironment != null)
-            {
-                await webView.EnsureCoreWebView2Async(webEnvironment);
-
-                AttachContextMenu(webView);
-
-                // Встроенный блокировщик: перехватываем все сетевые запросы
-                webView.CoreWebView2.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
-                webView.CoreWebView2.WebResourceRequested += (sender, args) =>
-                {
-                    try
-                    {
-                        if (ShouldBlock(args.Request.Uri))
-                        {
-                            sessionBlockedCount++;
-                            blocker.BlockedCount++;
-                            // Возвращаем пустой ответ — запрос отменён
-                            var response = webEnvironment.CreateWebResourceResponse(
-                                new MemoryStream(), 204, "No Content", "");
-                            args.Response = response;
-                        }
-                    }
-                    catch { }
-                };
-
-                // Средний клик / target="_blank" — открываем вкладку в том же окне
-                webView.CoreWebView2.NewWindowRequested += (sender, args) =>
-                {
-                    args.Handled = true; // запрещаем WebView2 открывать новое окно
-                    string target = args.Uri;
-                    if (string.IsNullOrWhiteSpace(target)) return;
-
-                    // Выполняем в потоке UI, т.к. событие может прийти из фонового потока WebView2
-                    if (InvokeRequired)
-                        BeginInvoke(new Action(() => AddNewTab(target)));
-                    else
-                        AddNewTab(target);
-                };
-
-                webView.CoreWebView2.WebMessageReceived += (s, e) =>
-                {
-                    string msg = e.TryGetWebMessageAsString();
-                    if (string.IsNullOrEmpty(msg)) return;
-
-                    // Подсказки поиска с домашней страницы (data:text/html)
-                    if (msg.StartsWith("suggest:"))
-                    {
-                        string query = msg.Substring("suggest:".Length);
-                        if (!string.IsNullOrWhiteSpace(query))
-                            _ = FetchSuggestionsAsync(webView, query);
-                        return;
-                    }
-                    if (msg.StartsWith("suggest-pick:"))
-                    {
-                        // Пользователь выбрал подсказку — запоминаем в истории поиска
-                        string picked = msg.Substring("suggest-pick:".Length);
-                        Log("Search picked: " + picked);
-                        return;
-                    }
-
-                    // Команда очистки истории — только от нашей страницы «Журнал»
-                    bool fromHistoryPage = webView.CoreWebView2.Source != null &&
-                                           webView.CoreWebView2.Source.StartsWith("data:text/html") &&
-                                           webView.CoreWebView2.Source.Contains("Журнал");
-                    if (msg == "clear:" + historyClearToken && fromHistoryPage)
-                    {
-                        visitHistory.Clear();
-                        SaveHistory();
-                        MessageBox.Show("История успешно очищена!", "Atlas", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        webView.CoreWebView2.Reload();
-                        return;
-                    }
-
-                    // Пипетка: язык ищет домен кликнутого элемента и присылает его
-                    if (msg.StartsWith("picker:"))
-                    {
-                        string payload = msg.Substring("picker:".Length).Trim();
-                        string domain = payload;
-                        string selector = "";
-                        int sep = payload.IndexOf('|');
-                        if (sep > 0)
-                        {
-                            domain = payload.Substring(0, sep).Trim();
-                            selector = payload.Substring(sep + 1).Trim();
-                        }
-                        if (!string.IsNullOrEmpty(domain))
-                        {
-                            if (InvokeRequired)
-                                BeginInvoke(new Action(() => AddBlockedDomainFromPicker(domain)));
-                            else
-                                AddBlockedDomainFromPicker(domain);
-                        }
-                        if (!string.IsNullOrEmpty(selector) && selector != "body")
-                        {
-                            if (InvokeRequired)
-                                BeginInvoke(new Action(() => ApplyCosmeticFilter(selector)));
-                            else
-                                ApplyCosmeticFilter(selector);
-                        }
-                        // Снимаем режим пипетки после выбора
-                        if (InvokeRequired)
-                            BeginInvoke(new Action(() => SetPickerMode(false)));
-                        else
-                            SetPickerMode(false);
-                        return;
-                    }
-
-                    // Пипетка: пользователь кликнул по пустому месту — отменяем
-                    if (msg == "picker:cancel")
-                    {
-                        if (InvokeRequired)
-                            BeginInvoke(new Action(() => SetPickerMode(false)));
-                        else
-                            SetPickerMode(false);
-                    }
-                };
-
-                webView.CoreWebView2.DownloadStarting += (sender, e) =>
-                {
-                    try
-                    {
-                        string downloadsFolder = Path.Combine(
-                            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-                        Directory.CreateDirectory(downloadsFolder);
-
-                        // Получаем имя файла из URL: эти свойства доступны в разных версиях WebView2.
-                        string suggestedName = "download";
-                        try
-                        {
-                            Uri downloadUri = new Uri(e.DownloadOperation.Uri);
-                            string urlFileName = Path.GetFileName(downloadUri.LocalPath);
-                            if (!string.IsNullOrWhiteSpace(urlFileName))
-                                suggestedName = Uri.UnescapeDataString(urlFileName);
-                        }
-                        catch { }
-
-                        foreach (char invalid in Path.GetInvalidFileNameChars())
-                            suggestedName = suggestedName.Replace(invalid, '_');
-
-                        string nameOnly = Path.GetFileNameWithoutExtension(suggestedName);
-                        string extension = Path.GetExtension(suggestedName);
-                        if (string.IsNullOrWhiteSpace(nameOnly)) nameOnly = "download";
-
-                        string destination = Path.Combine(downloadsFolder, suggestedName);
-                        int suffix = 1;
-                        while (File.Exists(destination))
-                        {
-                            destination = Path.Combine(downloadsFolder,
-                                nameOnly + " (" + suffix++ + ")" + extension);
-                        }
-
-                        e.ResultFilePath = destination;
-                        DownloadEntry entry = new DownloadEntry
-                        {
-                            FileName = Path.GetFileName(destination),
-                            FilePath = destination,
-                            Url = e.DownloadOperation.Uri,
-                            Status = "Загрузка",
-                            Operation = e.DownloadOperation
-                        };
-                        downloads.Add(entry);
-                        e.DownloadOperation.StateChanged += (s2, e2) => UpdateDownloadEntry(entry);
-                        e.DownloadOperation.BytesReceivedChanged += (s2, e2) => UpdateDownloadEntry(entry);
-                        UpdateDownloadEntry(entry);
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show("Не удалось начать загрузку: " + ex.Message, "Atlas", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                };
-
-                webView.CoreWebView2.Navigate(url);
-
-                if (url.StartsWith("data:text/html"))
-                {
-                    if (url.Contains("Закладки")) tabButton.Text = " Закладки";
-                    else tabButton.Text = " Журнал";
-                }
-
-                webView.CoreWebView2.DocumentTitleChanged += (s, e) =>
-                {
-                    if (!url.StartsWith("data:text/html"))
-                    {
-                        string title = webView.CoreWebView2.DocumentTitle;
-                        if (!string.IsNullOrEmpty(title))
-                        {
-                            tabButton.Text = " " + ElideText(title.Length > 20 ? title.Substring(0, 17) + "…" : title, tabButton);
-                            browserContainer.Tag = title;
-
-                            if (webView.Source != null && !incognitoMode)
-                            {
-                                string currentUrl = webView.Source.ToString();
-                                var existing = visitHistory.FindLast(h => h.Url == currentUrl);
-                                if (existing != null)
-                                {
-                                    existing.Title = title;
-                                    SaveHistory();
-                                }
-                            }
-                        }
-                    }
-                };
-
-                webView.CoreWebView2.NavigationCompleted += (s, e) =>
-                {
-                    if (activeBrowserContainer == browserContainer && webView.Source != null)
-                    {
-                        string currentUrl = webView.Source.ToString();
-                        currentPageUrl = currentUrl;
-                        UpdateBookmarkIcon();
-
-                        if (!currentUrl.StartsWith("data:text/html"))
-                        {
-                            tabButton.Text = webView.CoreWebView2.DocumentTitle;
-                        }
-
-                        if (!currentUrl.StartsWith("data:text/html"))
-                        {
-                            UpdateAddressBarDisplay();
-                            string timeNow = DateTime.Now.ToString("HH:mm");
-
-                            if (!incognitoMode &&
-                                (visitHistory.Count == 0 || visitHistory[visitHistory.Count - 1].Url != currentUrl))
-                            {
-                                visitHistory.Add(new HistoryItem { Url = currentUrl, Title = webView.CoreWebView2.DocumentTitle, Time = timeNow });
-                                SaveHistory();
-                            }
-                        }
-                        else
-                        {
-                            txtUrl.Text = ElideText(currentUrl.Contains("Закладки") ? "atlas://bookmarks" : "atlas://history", txtUrl);
-                        }
-                    }
-                };
-            }
-        }
-
         private void OpenDownloadManager()
         {
             if (downloadManagerForm == null || downloadManagerForm.IsDisposed)
@@ -2358,7 +1818,7 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
             // внедряем/удаляем JS-перехватчик кликов
             string script = enabled ? BuildPickerScript() : "window.__atlasPickerOff && window.__atlasPickerOff();";
             try { webView.ExecuteScriptAsync(script); }
-            catch { }
+            catch (Exception ex) { Log("Picker script error", ex); }
         }
 
         private string BuildPickerScript()
@@ -2737,7 +2197,7 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
   window.__atlasClearFind = function(){{ window.getSelection().removeAllRanges(); }};
   return count;
 }})();";
-                    try { wv.ExecuteScriptAsync(script); } catch { }
+                    try { wv.ExecuteScriptAsync(script); } catch (Exception ex) { Log("Find script error", ex); }
                 };
                 findBox.KeyDown += (s, e) =>
                 {
@@ -2776,7 +2236,7 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
             else
             {
                 var wv = GetCurrentWebView();
-                try { wv?.ExecuteScriptAsync("window.__atlasClearFind && window.__atlasClearFind();"); } catch { }
+                try { wv?.ExecuteScriptAsync("window.__atlasClearFind && window.__atlasClearFind();"); } catch (Exception ex) { Log("Clear find error", ex); }
             }
         }
 
@@ -2918,7 +2378,7 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
             else
             {
                 // Поисковый запрос — используем выбранную поисковую систему
-                targetUrl = GetSearchUrl(input);
+                targetUrl = UrlHelper.BuildSearchUrl(appSettings.SearchEngine, input);
             }
 
             var currentWebView = GetCurrentWebView();
@@ -2931,9 +2391,7 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
             try
             {
                 string url = "https://suggestqueries.google.com/complete/search?client=chrome&hl=ru&q=" + Uri.EscapeDataString(query);
-                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-                http.DefaultRequestHeaders.Add("User-Agent", "Atlas-Browser");
-                string json = await http.GetStringAsync(url);
+                string json = await Http.GetStringAsync(url);
 
                 using var doc = JsonDocument.Parse(json);
                 var list = new List<string>();
@@ -2958,154 +2416,14 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
             }
         }
 
-        private string GetSearchUrl(string query)
-        {
-            string q = Uri.EscapeDataString(query);
-            switch (appSettings.SearchEngine?.ToLowerInvariant())
-            {
-                case "duckduckgo": return "https://duckduckgo.com/?q=" + q;
-                case "bing": return "https://www.bing.com/search?q=" + q;
-                case "yandex": return "https://yandex.ru/search/?text=" + q;
-                default: return "https://www.google.com/search?q=" + q;
-            }
-        }
-
         private void TxtUrl_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter)
             {
-                // Если выбрана подсказка — используем её
-                if (suggestionsList != null && suggestionsList.Visible && suggestionsList.SelectedIndex >= 0)
-                {
-                    txtUrl.Text = suggestionsList.SelectedItem.ToString();
-                    HideSuggestions();
-                }
                 NavigateToUrl(txtUrl.Text);
                 e.Handled = true;
                 e.SuppressKeyPress = true;
             }
-            else if (e.KeyCode == Keys.Down && suggestionsList != null && suggestionsList.Visible)
-            {
-                if (suggestionsList.SelectedIndex < suggestionsList.Items.Count - 1)
-                    suggestionsList.SelectedIndex++;
-                e.Handled = true;
-            }
-            else if (e.KeyCode == Keys.Up && suggestionsList != null && suggestionsList.Visible)
-            {
-                if (suggestionsList.SelectedIndex > 0)
-                    suggestionsList.SelectedIndex--;
-                e.Handled = true;
-            }
-            else if (e.KeyCode == Keys.Escape)
-            {
-                HideSuggestions();
-            }
-        }
-
-        // ==================== СТАТУС-БАР ====================
-        private void InitializeStatusBar()
-        {
-            Panel bar = new Panel
-            {
-                Dock = DockStyle.Bottom,
-                Height = 26,
-                BackColor = Color.FromArgb(7, 17, 36)
-            };
-            statusLabel = new Label
-            {
-                Dock = DockStyle.Left,
-                Width = Math.Max(400, this.Width / 2),
-                Padding = new Padding(12, 0, 0, 0),
-                ForeColor = TextMuted,
-                Font = new Font("Segoe UI", 8.5F),
-                TextAlign = ContentAlignment.MiddleLeft,
-                Text = "Готово"
-            };
-            loadProgress = new ProgressBar
-            {
-                Dock = DockStyle.Right,
-                Width = 140,
-                Height = 8,
-                Style = ProgressBarStyle.Continuous,
-                Visible = false,
-                ForeColor = Accent
-            };
-            bar.Controls.Add(statusLabel);
-            bar.Controls.Add(loadProgress);
-            this.Controls.Add(bar);
-        }
-
-        private void SetStatus(string text) { /* статус-бар отключён */ }
-
-        // ==================== УМНАЯ АДРЕСНАЯ СТРОКА ====================
-        private void InitializeSmartAddressBar()
-        {
-            suggestionsList = new ListBox
-            {
-                BackColor = Color.FromArgb(10, 22, 42),
-                ForeColor = TextMain,
-                BorderStyle = BorderStyle.FixedSingle,
-                Visible = false
-            };
-            suggestionsList.Click += (s, e) =>
-            {
-                if (suggestionsList.SelectedIndex >= 0)
-                {
-                    txtUrl.Text = suggestionsList.SelectedItem.ToString();
-                    HideSuggestions();
-                    NavigateToUrl(txtUrl.Text);
-                }
-            };
-            this.Controls.Add(suggestionsList);
-            suggestionsList.BringToFront();
-
-            txtUrl.TextChanged += (s, e) =>
-            {
-                if (suppressSuggestions) return;
-                ShowSuggestions(txtUrl.Text);
-            };
-        }
-
-        private void ShowSuggestions(string input)
-        {
-            return; // подсказки отключены
-            if (suggestionsList == null) return;
-            if (string.IsNullOrWhiteSpace(input) || input.StartsWith("data:"))
-            {
-                HideSuggestions();
-                return;
-            }
-
-            var matches = new List<string>();
-            string q = input.ToLowerInvariant();
-
-            // из истории
-            foreach (var h in visitHistory)
-            {
-                if (h.Url != null && h.Url.ToLowerInvariant().Contains(q) && !matches.Contains(h.Url))
-                    matches.Add(h.Url);
-            }
-            // из закладок
-            foreach (var b in bookmarks)
-            {
-                if (b.Url != null && b.Url.ToLowerInvariant().Contains(q) && !matches.Contains(b.Url))
-                    matches.Add(b.Url);
-            }
-
-            if (matches.Count == 0) { HideSuggestions(); return; }
-
-            suggestionsList.Items.Clear();
-            foreach (var m in matches.Take(8)) suggestionsList.Items.Add(m);
-            suggestionsList.Location = new Point(txtUrl.Left, txtUrl.Top + txtUrl.Height + 90);
-            suggestionsList.Width = txtUrl.Width;
-            suggestionsList.Height = Math.Min(180, suggestionsList.Items.Count * 20 + 6);
-            suggestionsList.Visible = true;
-            suggestionsList.BringToFront();
-        }
-
-        private void HideSuggestions()
-        {
-            if (suggestionsList != null) suggestionsList.Visible = false;
         }
 
         // ==================== ВЗАИМОДЕЙСТВИЕ С ВКЛАДКАМИ ====================
@@ -3119,19 +2437,6 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
             tab.Invalidate();
         }
 
-        private void InitializeTabInteractions()
-        {
-            tabHoverTimer = new System.Windows.Forms.Timer { Interval = 700 };
-            tabHoverTimer.Tick += (s, e) =>
-            {
-                tabHoverTimer.Stop();
-                if (hoveredTab == null) return;
-                // предпросмотр — показываем URL в статус-баре
-                if (hoveredTab.Tag is string url)
-                    SetStatus("Предпросмотр: " + url);
-            };
-        }
-
         // ==================== КОНТЕКСТНОЕ МЕНЮ WEBVIEW2 ====================
         // Последний URL, на котором был произведён правый клик (заполняется JS-перехватчиком)
         private string lastContextUrl = "";
@@ -3139,7 +2444,7 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
         private void AttachContextMenu(WebView2 webView)
         {
             try { webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false; }
-            catch { }
+            catch (Exception ex) { Log("Context menu disable error", ex); }
 
             var menu = new ContextMenuStrip();
             menu.BackColor = Color.FromArgb(10, 22, 42);
@@ -3157,7 +2462,7 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
             {
                 string url = !string.IsNullOrEmpty(lastContextUrl) ? lastContextUrl : webView.Source?.ToString();
                 if (!string.IsNullOrEmpty(url))
-                    try { Clipboard.SetText(url); SetStatus("Адрес скопирован"); } catch { }
+                    try { Clipboard.SetText(url); Log("Адрес скопирован"); } catch (Exception ex) { Log("Clipboard error", ex); }
             };
 
             var addBm = new ToolStripMenuItem("Добавить в закладки");
@@ -3165,10 +2470,10 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
             {
                 string url = !string.IsNullOrEmpty(lastContextUrl) ? lastContextUrl : webView.Source?.ToString();
                 if (string.IsNullOrEmpty(url)) return;
-                if (bookmarks.Any(b => b.Url == url)) { SetStatus("Уже в закладках"); return; }
+                if (bookmarks.Any(b => b.Url == url)) { Log("Уже в закладках"); return; }
                 bookmarks.Add(new BookmarkItem { Url = url, Title = webView.CoreWebView2.DocumentTitle ?? url });
                 SaveBookmarks();
-                SetStatus("Добавлено в закладки");
+                Log("Добавлено в закладки");
             };
 
             var blockEl = new ToolStripMenuItem("Заблокировать элемент (пипетка)");
@@ -3184,7 +2489,7 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
   while(n && !n.href){ n = n.parentElement; }
   window.__atlasCtxUrl = n && n.href ? n.href : '';
 }, true);";
-                try { webView.CoreWebView2.ExecuteScriptAsync(js); } catch { }
+                try { webView.CoreWebView2.ExecuteScriptAsync(js); } catch (Exception ex) { Log("Context menu JS error", ex); }
             };
             webView.MouseDown += async (s, e) =>
             {
@@ -3204,7 +2509,7 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
         {
             foreach (var d in downloads)
             {
-                try { d.Operation?.Cancel(); } catch { }
+                try { d.Operation?.Cancel(); } catch (Exception ex) { Log("Download cancel error", ex); }
             }
             downloads.Clear();
             RefreshDownloadManager();
@@ -3313,13 +2618,9 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
 
             try
             {
-                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-                http.DefaultRequestHeaders.Add("User-Agent", "Atlas-Browser-Updater");
-                http.DefaultRequestHeaders.Add("Accept", "application/vnd.github+json");
-
                 // Не экранируем слеш в owner/repo — иначе GitHub API вернёт 404
                 string url = $"https://api.github.com/repos/{repo.Trim('/')}/releases/latest";
-                var response = await http.GetAsync(url);
+                var response = await Http.GetAsync(url);
                 if (!response.IsSuccessStatusCode)
                 {
                     Log($"Update check failed: HTTP {(int)response.StatusCode} for {repo}");
@@ -3337,7 +2638,7 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
                 string releaseUrl = root.TryGetProperty("html_url", out var h) ? h.GetString() ?? "" : "";
                 string latest = tag.TrimStart('v', 'V');
 
-                bool newer = IsNewerVersion(latest, AppVersion);
+                bool newer = VersionHelper.IsNewer(latest, AppVersion);
                 Log($"Update check: current={AppVersion}, latest={latest}, newer={newer}");
 
                 if (newer)
@@ -3414,26 +2715,22 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
                     "Atlas — Обновления", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                 if (proceed != DialogResult.Yes) return;
 
-                using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) })
+                using var response = await Http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
+                response.EnsureSuccessStatusCode();
+                long total = response.Content.Headers.ContentLength ?? 0;
+                using var fs = new FileStream(temp, FileMode.Create, FileAccess.Write);
+                using var stream = await response.Content.ReadAsStreamAsync();
+                byte[] buffer = new byte[81920];
+                long readTotal = 0;
+                int read;
+                while ((read = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                 {
-                    http.DefaultRequestHeaders.Add("User-Agent", "Atlas-Browser-Updater");
-                    using var response = await http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
-                    response.EnsureSuccessStatusCode();
-                    long total = response.Content.Headers.ContentLength ?? 0;
-                    using var fs = new FileStream(temp, FileMode.Create, FileAccess.Write);
-                    using var stream = await response.Content.ReadAsStreamAsync();
-                    byte[] buffer = new byte[81920];
-                    long readTotal = 0;
-                    int read;
-                    while ((read = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                    await fs.WriteAsync(buffer, 0, read);
+                    readTotal += read;
+                    if (total > 0)
                     {
-                        await fs.WriteAsync(buffer, 0, read);
-                        readTotal += read;
-                        if (total > 0)
-                        {
-                            int pct = (int)(readTotal * 100 / total);
-                            SetStatus($"Загрузка обновления: {pct}%");
-                        }
+                        int pct = (int)(readTotal * 100 / total);
+                        if (pct % 10 == 0) Log($"Загрузка обновления: {pct}%");
                     }
                 }
 
@@ -3470,23 +2767,6 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
                 MessageBox.Show("Не удалось скачать обновление:\n" + ex.Message,
                     "Atlas — Обновления", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-        }
-
-        private bool IsNewerVersion(string latest, string current)
-        {
-            if (Version.TryParse(latest, out var lv) && Version.TryParse(current, out var cv))
-                return lv > cv;
-            // fallback: сравнение по частям
-            var l = latest.Split('.');
-            var c = current.Split('.');
-            for (int i = 0; i < Math.Max(l.Length, c.Length); i++)
-            {
-                int ln = i < l.Length && int.TryParse(l[i], out var a) ? a : 0;
-                int cn = i < c.Length && int.TryParse(c[i], out var b) ? b : 0;
-                if (ln > cn) return true;
-                if (ln < cn) return false;
-            }
-            return false;
         }
 
         // ==================== НАСТРОЙКИ ПРИЛОЖЕНИЯ ====================
@@ -3673,7 +2953,7 @@ window.__atlasShowSuggestions=function(items){renderSuggest(items);};
                 {
                     if (c is Panel p && p.Controls.Count > 0 && p.Controls[0] is WebView2 w)
                     {
-                        try { w.CoreWebView2?.Reload(); } catch { }
+                        try { w.CoreWebView2?.Reload(); } catch (Exception ex) { Log("Reload after extension error", ex); }
                     }
                 }
             };
