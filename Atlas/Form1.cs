@@ -68,7 +68,7 @@ namespace Atlas
             return client;
         }
 
-        private const string AppVersion = "1.0.15";
+        private const string AppVersion = "1.0.16";
         private const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
@@ -2946,13 +2946,50 @@ namespace Atlas
             }
         }
 
+        // Импорт данных из другого браузера
+        private void ImportBrowserData(string type, string path)
+        {
+            try
+            {
+                int addedBm = 0, addedHist = 0;
+                if (type == "bookmarks_html")
+                {
+                    foreach (var b in Importer.FromHtml(path))
+                        if (bookmarks.All(x => x.Url != b.Url)) { bookmarks.Add(b); addedBm++; }
+                }
+                else if (type == "bookmarks_json")
+                {
+                    foreach (var b in Importer.FromChromeJson(path))
+                        if (bookmarks.All(x => x.Url != b.Url)) { bookmarks.Add(b); addedBm++; }
+                }
+                else if (type == "history_sqlite")
+                {
+                    foreach (var h in Importer.FromChromeHistorySqlite(path))
+                        if (visitHistory.All(x => x.Url != h.Url)) { visitHistory.Add(h); addedHist++; }
+                }
+
+                SaveBookmarks();
+                SaveHistory();
+                Log($"Import {type}: +{addedBm} bookmarks, +{addedHist} history");
+                MessageBox.Show(
+                    $"Импорт завершён.\nДобавлено закладок: {addedBm}\nДобавлено записей истории: {addedHist}",
+                    "Atlas — Импорт", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                Log("ImportBrowserData error", ex);
+                MessageBox.Show("Ошибка импорта:\n" + ex.Message, "Atlas — Импорт", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         // ==================== НАСТРОЙКИ ПРИЛОЖЕНИЯ ====================
         // Тёмный ComboBox с собственной отрисовкой
         private void OpenAppSettings()
         {
             using var form = new SettingsForm(appSettings, ApplyDarkTitle,
                 () => { SaveAppSettings(); ApplyTheme(); },
-                () => { SaveAppSettings(); _ = CheckForUpdatesAsync(true); });
+                () => { SaveAppSettings(); _ = CheckForUpdatesAsync(true); },
+                ImportBrowserData);
             form.ShowDialog(this);
         }
     }

@@ -9,13 +9,16 @@ namespace Atlas
     {
         private readonly Action onSave;
         private readonly Action onCheckUpdates;
+        private readonly Action<string, string> onImport; // тип, путь
 
-        public SettingsForm(Form1.AppSettings settings, Action<Form, string> darkHeader, Action onSave, Action onCheckUpdates)
+        public SettingsForm(Form1.AppSettings settings, Action<Form, string> darkHeader, Action onSave, Action onCheckUpdates,
+            Action<string, string> onImport)
         {
             this.onSave = onSave;
             this.onCheckUpdates = onCheckUpdates;
+            this.onImport = onImport;
             Text = "Atlas — Настройки";
-            Width = 650; Height = 520;
+            Width = 650; Height = 580;
             StartPosition = FormStartPosition.CenterParent;
             BackColor = Color.FromArgb(3, 7, 17);
             ForeColor = Color.FromArgb(226, 236, 252);
@@ -91,12 +94,37 @@ namespace Atlas
             Button btnCheckNow = MakeButton("Проверить сейчас", fieldX, 274, 160);
             btnCheckNow.Click += (s, e) => onCheckUpdates();
 
-            Button btnSave = MakeButton("Сохранить", 24, 340, 180);
+            Button btnImport = MakeButton("Импорт данных из браузера", 214, 340, 240);
+            btnImport.BackColor = Color.FromArgb(17, 34, 60);
+            btnImport.Click += (s, e) =>
+            {
+                var menu = new ContextMenuStrip();
+                menu.BackColor = Color.FromArgb(10, 22, 42);
+                menu.ForeColor = Color.White;
+                menu.Items.Add("Закладки из HTML (Chrome/Firefox/Edge)", null, (_, __) =>
+                {
+                    var ofd = new OpenFileDialog { Filter = "HTML files|*.html;*.htm", Title = "Экспорт закладок" };
+                    if (ofd.ShowDialog() == DialogResult.OK) onImport("bookmarks_html", ofd.FileName);
+                });
+                menu.Items.Add("Закладки из Chrome/Edge (Bookmarks JSON)", null, (_, __) =>
+                {
+                    var ofd = new OpenFileDialog { Filter = "Bookmarks|Bookmarks;*.json", Title = "Файл Bookmarks" };
+                    if (ofd.ShowDialog() == DialogResult.OK) onImport("bookmarks_json", ofd.FileName);
+                });
+                menu.Items.Add("История из Chrome/Edge (SQLite)", null, (_, __) =>
+                {
+                    var ofd = new OpenFileDialog { Filter = "History DB|History;*.db;*.sqlite", Title = "Файл History" };
+                    if (ofd.ShowDialog() == DialogResult.OK) onImport("history_sqlite", ofd.FileName);
+                });
+                menu.Show(Cursor.Position);
+            };
+
+            Button btnSave = MakeButton("Сохранить", 24, 390, 180);
             btnSave.BackColor = Color.FromArgb(56, 139, 253);
             btnSave.DialogResult = DialogResult.OK;
 
             Controls.AddRange(new Control[] { lTheme, cbTheme, lSearch, cbSearch, lFolder, tbFolder, btnBrowse,
-                cbAutoUpdate, cbAutoInstall, cbSingleProcess, lRepo, tbRepo, repoHint, btnCheckNow, btnSave });
+                cbAutoUpdate, cbAutoInstall, cbSingleProcess, lRepo, tbRepo, repoHint, btnCheckNow, btnImport, btnSave });
             darkHeader(this, "Atlas — Настройки");
 
             FormClosing += (s, e) =>
