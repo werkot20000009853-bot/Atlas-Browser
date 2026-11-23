@@ -68,7 +68,7 @@ namespace Atlas
             return client;
         }
 
-        private const string AppVersion = "1.0.16";
+        private const string AppVersion = "1.0.17";
         private const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
@@ -2892,7 +2892,7 @@ namespace Atlas
                     "tasklist /FI \"IMAGENAME eq Atlas.exe\" 2>NUL | find /I \"Atlas.exe\" >NUL\r\n" +
                     "if \"%ERRORLEVEL%\"==\"0\" ( timeout /t 1 /nobreak >NUL & goto wait )\r\n" +
                     "timeout /t 1 /nobreak >NUL\r\n" +
-                    $"xcopy /E /Y /Q /H /R \"{sourceDir}\\*\" \"{appDir}\\\" >NUL\r\n" +
+                    $"xcopy /E /Y /Q /H /R \"{sourceDir}\\*\" \"{appDir}\" >NUL\r\n" +
                     $"start \"\" \"{appDir}\\Atlas.exe\"\r\n" +
                     $"del \"{temp}\" >NUL 2>&1\r\n" +
                     $"rmdir /S /Q \"{sourceDir}\" >NUL 2>&1\r\n" +
