@@ -68,7 +68,7 @@ namespace Atlas
             return client;
         }
 
-        private const string AppVersion = "1.0.17";
+        private const string AppVersion = "1.0.18";
         private const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
@@ -537,7 +537,6 @@ namespace Atlas
         private Button btnPicker;
         private Button btnSettings;
         private Button btnExtensions;
-        private Button btnSystemLogin;
         private bool pickerMode = false;
         private string currentPageUrl = "";
 
@@ -546,6 +545,8 @@ namespace Atlas
             InitializeComponent();
             LoadAppSettings();
             LoadData();
+            // Автоматический перенос закладок и истории из Chrome/Edge при первом запуске
+            _ = Task.Run(() => AutoImportFromBrowsers());
             LoadBlockerSettings();
             InitializeBrowserControls();
             InitializeTitleBar();
@@ -1214,13 +1215,7 @@ namespace Atlas
             btnExtensions = CreateNavButton(IcoExtension, 28);
             btnExtensions.Left = 258;
             btnExtensions.Top = 56;
-            // Вход в Google/YouTube через системный браузер
-            btnSystemLogin = CreateNavButton(IcoExternal, 28);
-            btnSystemLogin.Left = 300;
-            btnSystemLogin.Top = 56;
-            btnSystemLogin.Click += (s, e) => OpenInSystemBrowser();
-
-            btnExtensions.Click += (s, e) =>
+                        btnExtensions.Click += (s, e) =>
             {
                 var wv = GetCurrentWebView();
                 ExtensionsHost.Open(this, wv, ApplyDarkTitle, () =>
@@ -1251,7 +1246,6 @@ namespace Atlas
             navPanel.Controls.Add(btnPicker);
             navPanel.Controls.Add(btnSettings);
             navPanel.Controls.Add(btnExtensions);
-            navPanel.Controls.Add(btnSystemLogin);
 
             navPanel.Resize += (s, e) =>
             {
@@ -2915,35 +2909,55 @@ namespace Atlas
             }
         }
 
-        // Открыть текущий сайт (или страницу входа Google) в системном браузере
-        private void OpenInSystemBrowser()
+        // Автоматический перенос закладок и истории из Chrome/Edge при первом запуске.
+        // Работает только если в Atlas ещё нет своих данных, импортирует молча (без окон).
+        private void AutoImportFromBrowsers()
         {
-            string url = null;
-            var wv = GetCurrentWebView();
-            if (wv?.Source != null)
-            {
-                string src = wv.Source;
-                if (!src.StartsWith("data:") && !src.StartsWith("about:"))
-                    url = src;
-            }
-            if (string.IsNullOrEmpty(url)) url = "https://accounts.google.com/";
-
             try
             {
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-                Log("Opened in system browser: " + url);
-                MessageBox.Show(
-                    "Страница открыта в системном браузере.\n\nВойдите в Google/YouTube там, затем вернитесь в Atlas — " +
-                    "если профиль общий, сессия может подхватиться автоматически.\n\n" +
-                    "Если нет — используйте системный браузер для входа, а Atlas для просмотра.",
-                    "Atlas — Вход", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (incognitoMode) return;
+                if (bookmarks.Count > 0 || visitHistory.Count > 0) return;
+
+                var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                var candidates = new[]
+                {
+                    // Chrome
+                    (
+                        browser: "Chrome",
+                        bookmarks: Path.Combine(localAppData, @"Google\Chrome\User Data\Default\Bookmarks"),
+                        history: Path.Combine(localAppData, @"Google\Chrome\User Data\Default\History")
+                    ),
+                    // Edge
+                    (
+                        browser: "Edge",
+                        bookmarks: Path.Combine(localAppData, @"Microsoft\Edge\User Data\Default\Bookmarks"),
+                        history: Path.Combine(localAppData, @"Microsoft\Edge\User Data\Default\History")
+                    ),
+                };
+
+                foreach (var c in candidates)
+                {
+                    try
+                    {
+                        if (File.Exists(c.bookmarks) && bookmarks.Count == 0)
+                        {
+                            foreach (var b in Importer.FromChromeJson(c.bookmarks))
+                                if (bookmarks.All(x => x.Url != b.Url)) bookmarks.Add(b);
+                            SaveBookmarks();
+                            Log($"Автоимпорт закладок из {c.browser}: {bookmarks.Count}");
+                        }
+                        if (File.Exists(c.history) && visitHistory.Count == 0)
+                        {
+                            foreach (var h in Importer.FromChromeHistorySqlite(c.history))
+                                if (visitHistory.All(x => x.Url != h.Url)) visitHistory.Add(h);
+                            SaveHistory();
+                            Log($"Автоимпорт истории из {c.browser}: {visitHistory.Count}");
+                        }
+                    }
+                    catch (Exception ex) { Log($"Автоимпорт из {c.browser} ошибка", ex); }
+                }
             }
-            catch (Exception ex)
-            {
-                Log("OpenInSystemBrowser error", ex);
-                MessageBox.Show("Не удалось открыть системный браузер:\n" + ex.Message,
-                    "Atlas", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+            catch (Exception ex) { Log("AutoImportFromBrowsers ошибка", ex); }
         }
 
         // Импорт данных из другого браузера
