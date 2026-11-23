@@ -68,7 +68,7 @@ namespace Atlas
             return client;
         }
 
-        private const string AppVersion = "1.0.19";
+        private const string AppVersion = "1.0.20";
         private const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
@@ -88,6 +88,7 @@ namespace Atlas
         private const string IcoPicker    = "\uE7B3";
         private const string IcoSettings  = "\uE713";
         private const string IcoExtension = "\uE9E7"; // пазл-расширение
+        private const string IcoImport = "\uE8C5"; // импорт
         private const string IcoExternal = "\uE71B"; // открыть во внешнем приложении
         private const string IcoClose     = "\uE711";
         private const string IcoMin       = "\uE70D";
@@ -537,6 +538,7 @@ namespace Atlas
         private Button btnPicker;
         private Button btnSettings;
         private Button btnExtensions;
+        private Button btnImportFromBrowser;
         private bool pickerMode = false;
         private string currentPageUrl = "";
 
@@ -1230,6 +1232,99 @@ namespace Atlas
                 });
             };
 
+            // Перенос закладок и истории из Chrome/Edge (автоопределение профилей)
+            btnImportFromBrowser = CreateNavButton(IcoImport, 28);
+            btnImportFromBrowser.Left = 300;
+            btnImportFromBrowser.Top = 56;
+            btnImportFromBrowser.Click += async (s, e) =>
+            {
+                if (incognitoMode)
+                {
+                    MessageBox.Show("В режиме инкогнито импорт недоступен.", "Atlas — Импорт",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                var candidates = new[]
+                {
+                    (browser: "Chrome",
+                        bookmarks: Path.Combine(localAppData, @"Google\Chrome\User Data\Default\Bookmarks"),
+                        history: Path.Combine(localAppData, @"Google\Chrome\User Data\Default\History")),
+                    (browser: "Edge",
+                        bookmarks: Path.Combine(localAppData, @"Microsoft\Edge\User Data\Default\Bookmarks"),
+                        history: Path.Combine(localAppData, @"Microsoft\Edge\User Data\Default\History")),
+                };
+
+                // Подсчёт того, что можно импортировать (без дублей)
+                int totalBm = 0, totalHist = 0;
+                string foundFrom = "";
+                foreach (var c in candidates)
+                {
+                    try
+                    {
+                        int bm = 0, hist = 0;
+                        if (File.Exists(c.bookmarks))
+                            bm = Importer.FromChromeJson(c.bookmarks).Count(x => bookmarks.All(b => b.Url != x.Url));
+                        if (File.Exists(c.history))
+                            hist = Importer.FromChromeHistorySqlite(c.history).Count(x => visitHistory.All(h => h.Url != x.Url));
+                        if (bm > 0 || hist > 0)
+                        {
+                            totalBm += bm;
+                            totalHist += hist;
+                            foundFrom = c.browser;
+                        }
+                    }
+                    catch { }
+                }
+
+                if (totalBm == 0 && totalHist == 0)
+                {
+                    MessageBox.Show("Не найдено данных для импорта из Chrome или Edge.\n" +
+                        "Закройте браузер и убедитесь, что в нём есть закладки и история.",
+                        "Atlas — Импорт", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var result = MessageBox.Show(
+                    $"Найдено для переноса из {foundFrom}:\nЗакладок: {totalBm}\nЗаписей истории: {totalHist}\n\nПеренести в Atlas?",
+                    "Atlas — Перенос данных", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (result != DialogResult.Yes) return;
+
+                try
+                {
+                    int addedBm = 0, addedHist = 0;
+                    foreach (var c in candidates)
+                    {
+                        try
+                        {
+                            if (File.Exists(c.bookmarks))
+                            {
+                                foreach (var b in Importer.FromChromeJson(c.bookmarks))
+                                    if (bookmarks.All(x => x.Url != b.Url)) { bookmarks.Add(b); addedBm++; }
+                            }
+                            if (File.Exists(c.history))
+                            {
+                                foreach (var h in Importer.FromChromeHistorySqlite(c.history))
+                                    if (visitHistory.All(x => x.Url != h.Url)) { visitHistory.Add(h); addedHist++; }
+                            }
+                        }
+                        catch { }
+                    }
+                    SaveBookmarks();
+                    SaveHistory();
+                    Log($"Ручной импорт: +{addedBm} закладок, +{addedHist} истории");
+                    MessageBox.Show($"Перенос завершён.\nЗакладок: {addedBm}\nЗаписей истории: {addedHist}",
+                        "Atlas — Импорт", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    Log("ManualImport error", ex);
+                    MessageBox.Show("Ошибка при переносе данных:\n" + ex.Message,
+                        "Atlas — Импорт", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            };
+
             navPanel.Controls.Add(btnRefresh);
             navPanel.Controls.Add(btnHome);
             navPanel.Controls.Add(btnHistory);
@@ -1246,6 +1341,7 @@ namespace Atlas
             navPanel.Controls.Add(btnPicker);
             navPanel.Controls.Add(btnSettings);
             navPanel.Controls.Add(btnExtensions);
+            navPanel.Controls.Add(btnImportFromBrowser);
 
             navPanel.Resize += (s, e) =>
             {
