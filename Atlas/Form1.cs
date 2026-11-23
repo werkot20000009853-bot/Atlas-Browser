@@ -68,7 +68,7 @@ namespace Atlas
             return client;
         }
 
-        private const string AppVersion = "1.0.18";
+        private const string AppVersion = "1.0.19";
         private const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
         private const string UpdateRepoFixed = "werkot20000009853-bot/Atlas-Browser";
 
@@ -2811,12 +2811,18 @@ namespace Atlas
                 string temp = Path.Combine(Path.GetTempPath(),
                     "atlas_" + Guid.NewGuid().ToString("N") + "_" + fileName);
 
-                // Чистим старые временные файлы обновления, чтобы не засорять Temp
+                // Чистим старые временные файлы обновления, чтобы не было конфликтов блокировки
                 try
                 {
-                    foreach (var old in Directory.GetFiles(Path.GetTempPath(), "atlas_*_" + fileName))
+                    foreach (var old in Directory.GetFiles(Path.GetTempPath(), "atlas_*"))
                     {
-                        try { File.Delete(old); } catch { }
+                        try
+                        {
+                            if (old.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                                old.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                                File.Delete(old);
+                        }
+                        catch { }
                     }
                 }
                 catch { }
@@ -2826,26 +2832,45 @@ namespace Atlas
                     "Atlas — Обновления", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                 if (proceed != DialogResult.Yes) return;
 
-                using var response = await Http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
-                response.EnsureSuccessStatusCode();
-                long total = response.Content.Headers.ContentLength ?? 0;
-                using var fs = new FileStream(temp, FileMode.Create, FileAccess.Write);
-                using var stream = await response.Content.ReadAsStreamAsync();
-                byte[] buffer = new byte[81920];
-                long readTotal = 0;
-                int read;
-                while ((read = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                // Скачиваем с повторами, если файл временно залочен другим процессом ( антивирус и т.п.)
+                Exception lastEx = null;
+                for (int attempt = 1; attempt <= 3; attempt++)
                 {
-                    await fs.WriteAsync(buffer, 0, read);
-                    readTotal += read;
-                    if (total > 0)
+                    try
                     {
-                        int pct = (int)(readTotal * 100 / total);
-                        if (pct % 10 == 0) Log($"Загрузка обновления: {pct}%");
+                        using var response = await Http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
+                        response.EnsureSuccessStatusCode();
+                        long total = response.Content.Headers.ContentLength ?? 0;
+                        // FileShare.ReadWrite | Delete — не блокируем файл для других процессов
+                        using var fs = new FileStream(temp, FileMode.Create, FileAccess.Write,
+                            FileShare.ReadWrite | FileShare.Delete);
+                        using var stream = await response.Content.ReadAsStreamAsync();
+                        byte[] buffer = new byte[81920];
+                        long readTotal = 0;
+                        int read;
+                        while ((read = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                        {
+                            await fs.WriteAsync(buffer, 0, read);
+                            readTotal += read;
+                            if (total > 0)
+                            {
+                                int pct = (int)(readTotal * 100 / total);
+                                if (pct % 10 == 0) Log($"Загрузка обновления: {pct}%");
+                            }
+                        }
+                        Log($"Update downloaded: {temp}");
+                        lastEx = null;
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        lastEx = ex;
+                        Log($"Update download attempt {attempt} failed", ex);
+                        await Task.Delay(1500);
                     }
                 }
-
-                Log($"Update downloaded: {temp}");
+                if (lastEx != null)
+                    throw lastEx;
 
                 // Распаковываем архив (если это ZIP) и находим папку с новыми файлами
                 string sourceDir;
